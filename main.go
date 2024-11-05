@@ -17,22 +17,25 @@ type Config struct {
 }
 
 type GitLabConfig struct {
-	EnvTokenVariableName string  `yaml:"tokenEnvVar"`    // The environment variable name for the GitLab token
-	HostName             string  `yaml:"hostName"`       // Gitlab host name
-	CloneDirectory       string  `yaml:"cloneDirectory"` // Where to clone projects in local directory structure
-	Groups               []Group `yaml:"groups"`
-	Projects             []Group `yaml:"projects"`
+	EnvTokenVariableName string    `yaml:"tokenEnvVar"`    // The environment variable name for the GitLab token
+	HostName             string    `yaml:"hostName"`       // Gitlab host name
+	CloneDirectory       string    `yaml:"cloneDirectory"` // Where to clone projects in local directory structure
+	Groups               []Group   `yaml:"groups"`
+	Projects             []Project `yaml:"projects"`
 }
 
 type Group struct {
 	ID string `yaml:"id"`
 }
 
+type Project struct {
+	Name     string `yaml:"name"`
+	FullPath string `yaml:"fullPath"`
+}
+
 type ProjectGitlabSpec struct {
-	ID                int    `json:"id"`
 	Name              string `json:"name"`
 	SSHURLToRepo      string `json:"ssh_url_to_repo"`
-	HTTPURLToRepo     string `json:"http_url_to_repo"`
 	PathWithNamespace string `json:"path_with_namespace"`
 }
 
@@ -74,6 +77,22 @@ func main() {
 				log.Printf("Failed to clone projects for group %s: %v", group.ID, err)
 			}
 		}
+
+		// Process individual projects
+		for _, prj := range gitlab.Projects {
+			project := convertToGitlabProjectSpec(prj, gitlab)
+			if err != nil {
+				log.Printf("Failed to fetch project %s: %v", prj.FullPath, err)
+				continue
+			}
+			err = cloneProject(project, gitlab)
+			if err != nil {
+				log.Printf("Failed to clone project %s: %v", project.Name, err)
+			} else {
+				fmt.Printf("Successfully cloned project %s\n", project.Name)
+			}
+		}
+
 	}
 }
 
@@ -99,7 +118,7 @@ func cloneGroupProjects(token, groupID string, gitlab GitLabConfig) error {
 		return fmt.Errorf("failed to fetch projects for group %s: %w", groupID, err)
 	}
 	for _, project := range projects {
-		err := cloneProject(project, gitlab)
+		err := cloneProject(&project, gitlab)
 		if err != nil {
 			log.Printf("Failed to clone project %s: %v", project.Name, err)
 		} else {
@@ -120,6 +139,16 @@ func cloneGroupProjects(token, groupID string, gitlab GitLabConfig) error {
 	}
 
 	return nil
+}
+
+func convertToGitlabProjectSpec(project Project, gitlab GitLabConfig) *ProjectGitlabSpec {
+	var gitlabProjectSpec = ProjectGitlabSpec{
+		Name:              project.Name,
+		PathWithNamespace: project.FullPath,
+		SSHURLToRepo:      fmt.Sprintf("git@%s:%s", gitlab.HostName, project.FullPath),
+	}
+
+	return &gitlabProjectSpec
 }
 
 func fetchProjects(token, groupID string, gitlab GitLabConfig) ([]ProjectGitlabSpec, error) {
@@ -178,7 +207,7 @@ func fetchSubgroups(token, groupID string, gitlab GitLabConfig) ([]Subgroup, err
 	return subgroups, nil
 }
 
-func cloneProject(project ProjectGitlabSpec, gitlab GitLabConfig) error {
+func cloneProject(project *ProjectGitlabSpec, gitlab GitLabConfig) error {
 	projectPath := path.Join(gitlab.getCloneDirectory(), project.PathWithNamespace)
 
 	// Check if the project directory already exists

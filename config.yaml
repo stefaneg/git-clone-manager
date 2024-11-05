@@ -4,4 +4,8 @@ gitlab:
     cloneDirectory: 'cloned_projects'
     groups:
       - id: "catapult"
-      - id: "DevOps"
+#      - id: "DevOps"
+
+    projects:
+      - name: "Notes"
+        fullPath: "gudlaugur.egilsson/notes"
