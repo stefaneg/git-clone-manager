@@ -1,0 +1,7 @@
+gitlab:
+  - tokenEnvVar: "GITLAB_API_TOKEN"
+    hostName: 'gitlab.controlant.com'
+    cloneDirectory: 'cloned_projects'
+    groups:
+      - id: "catapult"
+      - id: "DevOps"
