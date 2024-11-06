@@ -12,6 +12,8 @@ import (
 	"path"
 )
 
+const verbose = false // Change to a flag later
+
 type Config struct {
 	GitLab []GitLabConfig `yaml:"gitlab"`
 }
@@ -37,6 +39,7 @@ type ProjectGitlabSpec struct {
 	Name              string `json:"name"`
 	SSHURLToRepo      string `json:"ssh_url_to_repo"`
 	PathWithNamespace string `json:"path_with_namespace"`
+	Archived          bool   `json:"archived"`
 }
 
 type Subgroup struct {
@@ -88,8 +91,6 @@ func main() {
 			err = cloneProject(project, gitlab)
 			if err != nil {
 				log.Printf("Failed to clone project %s: %v", project.Name, err)
-			} else {
-				fmt.Printf("Successfully cloned project %s\n", project.Name)
 			}
 		}
 
@@ -121,8 +122,6 @@ func cloneGroupProjects(token, groupID string, gitlab GitLabConfig) error {
 		err := cloneProject(&project, gitlab)
 		if err != nil {
 			log.Printf("Failed to clone project %s: %v", project.Name, err)
-		} else {
-			fmt.Printf("Successfully cloned project %s\n", project.Name)
 		}
 	}
 
@@ -207,13 +206,49 @@ func fetchSubgroups(token, groupID string, gitlab GitLabConfig) ([]Subgroup, err
 	return subgroups, nil
 }
 
+// writeArchivedMarker creates an "ARCHIVED.txt" file in the root directory of the archived project
+func writeArchivedMarker(projectPath string) error {
+	// Define the path for the ARCHIVED.txt marker file
+	markerFilePath := path.Join(projectPath, "ARCHIVED.txt")
+
+	// Create the marker file
+	file, err := os.Create(markerFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to create marker file: %w", err)
+	}
+	defer file.Close()
+
+	// Write a message indicating the project is archived
+	_, err = file.WriteString("This project is archived and not active.\n")
+	if err != nil {
+		return fmt.Errorf("failed to write to marker file: %w", err)
+	}
+	if verbose {
+		fmt.Printf("ARCHIVED.txt marker file created at %s\n", markerFilePath)
+	}
+	return nil
+}
+
 func cloneProject(project *ProjectGitlabSpec, gitlab GitLabConfig) error {
 	projectPath := path.Join(gitlab.getCloneDirectory(), project.PathWithNamespace)
 
 	// Check if the project directory already exists
 	if _, err := os.Stat(projectPath); !os.IsNotExist(err) {
-		fmt.Printf("ProjectGitlabSpec %s already exists at %s, skipping clone\n", project.Name, projectPath)
+		if verbose {
+			fmt.Printf("ProjectGitlabSpec %s already exists at %s, skipping clone\n", project.Name, projectPath)
+		}
+		if project.Archived {
+			err := writeArchivedMarker(projectPath)
+			if err != nil {
+				return err
+			}
+		}
+
 		return nil // Skip cloning if directory already exists
+	}
+	if project.Archived {
+		fmt.Printf("Skipping archived project %s %s\n", project.Name, projectPath)
+		return nil
 	}
 
 	fmt.Printf("Cloning project to %s\n", projectPath)
@@ -227,3 +262,9 @@ func cloneProject(project *ProjectGitlabSpec, gitlab GitLabConfig) error {
 
 	return nil
 }
+
+// TODO
+// Take arguments. Start with verbose output or not.
+// Collect statistics - how many projects processed - checked out - archived
+// Report all projects that have a) have uncommitted changes b) are behind origin or without a tracked remote branch c) are checked out on a branch.
+// Create command to pull changes on projects on main and with a clean index.
