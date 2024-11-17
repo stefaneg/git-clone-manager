@@ -2,17 +2,18 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
-	"io/ioutil"
-	"log"
+	"io"
 	"net/http"
 	"os"
-	"os/exec"
-	"path"
+	"path/filepath"
+	"tools/internal/color"
+	"tools/internal/gitrepo"
+	l "tools/internal/log"
 )
-
-const verbose = false // Change to a flag later
 
 type Config struct {
 	GitLab []GitLabConfig `yaml:"gitlab"`
@@ -27,7 +28,8 @@ type GitLabConfig struct {
 }
 
 type Group struct {
-	ID string `yaml:"id"`
+	ID            string `yaml:"id"`
+	CloneArchived bool   `yaml:"cloneArchived"`
 }
 
 type Project struct {
@@ -35,19 +37,24 @@ type Project struct {
 	FullPath string `yaml:"fullPath"`
 }
 
-type ProjectGitlabSpec struct {
-	Name              string `json:"name"`
-	SSHURLToRepo      string `json:"ssh_url_to_repo"`
-	PathWithNamespace string `json:"path_with_namespace"`
-	Archived          bool   `json:"archived"`
-}
-
 type Subgroup struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
 }
 
-func (gitlab GitLabConfig) getCloneDirectory() string {
+type CustomFormatter struct {
+	logrus.TextFormatter
+}
+
+func (f *CustomFormatter) Format(entry *logrus.Entry) ([]byte, error) {
+	if entry.Level == logrus.InfoLevel {
+		entry.Message = fmt.Sprintf("%s\n", entry.Message)
+		return []byte(entry.Message), nil
+	}
+	return f.TextFormatter.Format(entry)
+}
+
+func (gitlab GitLabConfig) GetCloneDirectory() string {
 	return gitlab.CloneDirectory
 }
 
@@ -55,93 +62,144 @@ func (gitlab GitLabConfig) getBaseUrl() string {
 	return fmt.Sprintf("https://%s/api/v4", gitlab.HostName)
 }
 
-func main() {
+type NullableBool struct {
+	Value *bool
+}
 
-	config, err := loadConfig("config.yaml") // Replace with your config file name
+func (nb *NullableBool) Set(s string) error {
+	v := (s == "true")
+	nb.Value = &v
+	return nil
+}
+
+func (nb *NullableBool) String() string {
+	if nb.Value == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("%v", *nb.Value)
+}
+
+func (nb *NullableBool) Val(defaultValue bool) bool {
+	if nb.Value == nil {
+		return defaultValue
+	}
+	return *nb.Value
+}
+
+func (nb *NullableBool) IsBoolFlag() bool {
+	return true
+}
+
+func main() {
+	l.Log.SetFormatter(&CustomFormatter{logrus.TextFormatter{}})
+
+	var verbose = NullableBool{}
+	flag.Var(&verbose, "verbose", "Print verbose output")
+	flag.Parse()
+	if verbose.Val(false) {
+		l.Log.SetLevel(logrus.DebugLevel)
+		l.Log.Debugln("Verbose (debug) logging enabled")
+	}
+
+	config, err := loadConfig("workingCopies.yaml") // Replace with your config file name
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		l.Log.Fatalf("Failed to load configuration: %v", err)
 	}
 
 	for _, gitlab := range config.GitLab {
-		err = os.MkdirAll(gitlab.getCloneDirectory(), os.ModePerm)
+		l.Log.Infof("Cloning groups/projects in %s into %s", color.FgCyan(gitlab.HostName), color.FgCyan(gitlab.CloneDirectory))
+		err = os.MkdirAll(gitlab.GetCloneDirectory(), os.ModePerm)
 		if err != nil {
-			log.Fatalf("Failed to create clone directory: %v", err)
+			l.Log.Fatalf("Failed to create clone directory: %v", err)
 		}
 
 		token := os.Getenv(gitlab.EnvTokenVariableName)
 		if token == "" {
-			log.Printf("Environment variable %s not set; skipping", gitlab.EnvTokenVariableName)
+			l.Log.Printf("Environment variable %s not set; skipping", gitlab.EnvTokenVariableName)
 			continue
 		}
 
 		for _, group := range gitlab.Groups {
-			err := cloneGroupProjects(token, group.ID, gitlab)
+			l.Log.Infof("Cloning projects in group  %s\n", color.FgCyan(group.ID))
+			err := gitlab.cloneGroupProjects(token, group)
 			if err != nil {
-				log.Printf("Failed to clone projects for group %s: %v", group.ID, err)
+				l.Log.Printf("Failed to clone projects for group %s: %v", group.ID, err)
 			}
 		}
 
-		// Process individual projects
 		for _, prj := range gitlab.Projects {
 			project := convertToGitlabProjectSpec(prj, gitlab)
 			if err != nil {
-				log.Printf("Failed to fetch project %s: %v", prj.FullPath, err)
+				l.Log.Printf("Failed to fetch project %s: %v", prj.FullPath, err)
 				continue
 			}
-			err = cloneProject(project, gitlab)
+			err = project.CloneProject(gitlab.CloneDirectory, true)
 			if err != nil {
-				log.Printf("Failed to clone project %s: %v", project.Name, err)
+				l.Log.Printf("Failed to clone project %s: %v", project.Name, err)
 			}
 		}
-
 	}
+	l.Log.Infoln(color.FgGreen("Done!"))
 }
 
-func loadConfig(filePath string) (*Config, error) {
-	data, err := ioutil.ReadFile(filePath)
+func loadConfig(configFileName string) (*Config, error) {
+	configFilePath := filepath.Join("./", configFileName)
+
+	if _, err := os.Stat(configFileName); os.IsNotExist(err) {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("could not determine home directory: %v", err)
+		}
+		configFilePath = filepath.Join(homeDir, configFileName)
+		if _, err := os.Stat(configFileName); os.IsNotExist(err) {
+			return nil, fmt.Errorf("config file not found in current directory or home directory")
+		}
+	}
+
+	data, err := os.ReadFile(configFilePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		return nil, fmt.Errorf("could not read config file: %v", err)
 	}
 
 	var config Config
 	err = yaml.Unmarshal(data, &config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
+		return nil, fmt.Errorf("could not unmarshal config file: %v", err)
 	}
 
 	return &config, nil
 }
 
-func cloneGroupProjects(token, groupID string, gitlab GitLabConfig) error {
+func (gitlab GitLabConfig) cloneGroupProjects(token string, group Group) error {
 	// Fetch and clone all projects in the group
-	projects, err := fetchProjects(token, groupID, gitlab)
+	projects, err := gitlab.fetchProjects(token, group.ID)
 	if err != nil {
-		return fmt.Errorf("failed to fetch projects for group %s: %w", groupID, err)
+		return fmt.Errorf("failed to fetch projects for group %s: %w", group.ID, err)
 	}
 	for _, project := range projects {
-		err := cloneProject(&project, gitlab)
+		err := project.CloneProject(gitlab.CloneDirectory, group.CloneArchived)
 		if err != nil {
-			log.Printf("Failed to clone project %s: %v", project.Name, err)
+			l.Log.Printf("Failed to clone project %s: %v", project.Name, err)
 		}
 	}
 
 	// Fetch subgroups and recursively clone their projects
-	subgroups, err := fetchSubgroups(token, groupID, gitlab)
+	subgroups, err := gitlab.fetchSubgroups(token, group.ID)
 	if err != nil {
-		return fmt.Errorf("failed to fetch subgroups for group %s: %w", groupID, err)
+		return fmt.Errorf("failed to fetch subgroups for group %s: %w", group.ID, err)
 	}
 	for _, subgroup := range subgroups {
-		err := cloneGroupProjects(token, fmt.Sprintf("%d", subgroup.ID), gitlab)
+		err := gitlab.cloneGroupProjects(token, Group{ID: fmt.Sprintf("%d", subgroup.ID), CloneArchived: group.CloneArchived})
 		if err != nil {
-			log.Printf("Failed to clone projects for subgroup %s: %v", subgroup.Name, err)
+			l.Log.Printf("Failed to clone projects for subgroup %s: %v", subgroup.Name, err)
 		}
 	}
 
 	return nil
 }
 
-func convertToGitlabProjectSpec(project Project, gitlab GitLabConfig) *ProjectGitlabSpec {
-	var gitlabProjectSpec = ProjectGitlabSpec{
+func convertToGitlabProjectSpec(project Project, gitlab GitLabConfig) *gitrepo.GitRepoSpec {
+	var gitlabProjectSpec = gitrepo.GitRepoSpec{
 		Name:              project.Name,
 		PathWithNamespace: project.FullPath,
 		SSHURLToRepo:      fmt.Sprintf("git@%s:%s", gitlab.HostName, project.FullPath),
@@ -150,7 +208,8 @@ func convertToGitlabProjectSpec(project Project, gitlab GitLabConfig) *ProjectGi
 	return &gitlabProjectSpec
 }
 
-func fetchProjects(token, groupID string, gitlab GitLabConfig) ([]ProjectGitlabSpec, error) {
+func (gitlab GitLabConfig) fetchProjects(token, groupID string) ([]gitrepo.GitRepoSpec, error) {
+	l.Log.Debugf("Fetching projects in group %s\n", color.FgCyan(groupID))
 	url := fmt.Sprintf("%s/groups/%s/projects", gitlab.getBaseUrl(), groupID)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -164,13 +223,18 @@ func fetchProjects(token, groupID string, gitlab GitLabConfig) ([]ProjectGitlabS
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func(body io.ReadCloser) {
+		err := body.Close()
+		if err != nil {
+			l.Log.Errorf("Failed to close response body: %v", err)
+		}
+	}(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitLab API request failed with status: %s", resp.Status)
 	}
 
-	var projects []ProjectGitlabSpec
+	var projects []gitrepo.GitRepoSpec
 	if err := json.NewDecoder(resp.Body).Decode(&projects); err != nil {
 		return nil, err
 	}
@@ -178,7 +242,8 @@ func fetchProjects(token, groupID string, gitlab GitLabConfig) ([]ProjectGitlabS
 	return projects, nil
 }
 
-func fetchSubgroups(token, groupID string, gitlab GitLabConfig) ([]Subgroup, error) {
+func (gitlab GitLabConfig) fetchSubgroups(token, groupID string) ([]Subgroup, error) {
+	l.Log.Debugf("Fetching subgroups in group %s", color.FgCyan(groupID))
 	url := fmt.Sprintf("%s/groups/%s/subgroups", gitlab.getBaseUrl(), groupID)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -192,7 +257,12 @@ func fetchSubgroups(token, groupID string, gitlab GitLabConfig) ([]Subgroup, err
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			l.Log.Errorf("Failed to close response body: %v", err)
+		}
+	}(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitLab API request failed with status: %s", resp.Status)
@@ -205,66 +275,3 @@ func fetchSubgroups(token, groupID string, gitlab GitLabConfig) ([]Subgroup, err
 
 	return subgroups, nil
 }
-
-// writeArchivedMarker creates an "ARCHIVED.txt" file in the root directory of the archived project
-func writeArchivedMarker(projectPath string) error {
-	// Define the path for the ARCHIVED.txt marker file
-	markerFilePath := path.Join(projectPath, "ARCHIVED.txt")
-
-	// Create the marker file
-	file, err := os.Create(markerFilePath)
-	if err != nil {
-		return fmt.Errorf("failed to create marker file: %w", err)
-	}
-	defer file.Close()
-
-	// Write a message indicating the project is archived
-	_, err = file.WriteString("This project is archived and not active.\n")
-	if err != nil {
-		return fmt.Errorf("failed to write to marker file: %w", err)
-	}
-	if verbose {
-		fmt.Printf("ARCHIVED.txt marker file created at %s\n", markerFilePath)
-	}
-	return nil
-}
-
-func cloneProject(project *ProjectGitlabSpec, gitlab GitLabConfig) error {
-	projectPath := path.Join(gitlab.getCloneDirectory(), project.PathWithNamespace)
-
-	// Check if the project directory already exists
-	if _, err := os.Stat(projectPath); !os.IsNotExist(err) {
-		if verbose {
-			fmt.Printf("ProjectGitlabSpec %s already exists at %s, skipping clone\n", project.Name, projectPath)
-		}
-		if project.Archived {
-			err := writeArchivedMarker(projectPath)
-			if err != nil {
-				return err
-			}
-		}
-
-		return nil // Skip cloning if directory already exists
-	}
-	if project.Archived {
-		fmt.Printf("Skipping archived project %s %s\n", project.Name, projectPath)
-		return nil
-	}
-
-	fmt.Printf("Cloning project to %s\n", projectPath)
-
-	cmd := exec.Command("git", "clone", project.SSHURLToRepo, projectPath)
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git clone failed: %s", string(output))
-	}
-
-	return nil
-}
-
-// TODO
-// Take arguments. Start with verbose output or not.
-// Collect statistics - how many projects processed - checked out - archived
-// Report all projects that have a) have uncommitted changes b) are behind origin or without a tracked remote branch c) are checked out on a branch.
-// Create command to pull changes on projects on main and with a clean index.
