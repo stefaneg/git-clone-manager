@@ -33,8 +33,11 @@ func (project *GitRepoSpec) CloneProject(cloneDirectory string, cloneArchived bo
 	}
 
 	l.Log.Infof("Cloning project to %s\n", projectPath)
-
-	output, err := sh.ExecuteShellCommand(sh.DirectoryPath(projectPath), sh.ShellCommand(fmt.Sprintf("git clone %s", color.FgCyan(project.SSHURLToRepo))))
+	err := os.MkdirAll(projectPath, 0755)
+	if err != nil {
+		return fmt.Errorf("failed to create directory %s: %v", projectPath, err)
+	}
+	output, err := sh.ExecuteShellCommand(sh.DirectoryPath(projectPath), sh.ShellCommand(fmt.Sprintf("git clone %s", project.SSHURLToRepo)))
 
 	if err != nil {
 		return fmt.Errorf("git clone failed: %s", output)

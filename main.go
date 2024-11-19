@@ -91,15 +91,10 @@ func (nb *NullableBool) IsBoolFlag() bool {
 }
 
 func main() {
-	l.Log.SetFormatter(&CustomFormatter{logrus.TextFormatter{}})
-
 	var verbose = NullableBool{}
 	flag.Var(&verbose, "verbose", "Print verbose output")
 	flag.Parse()
-	if verbose.Val(false) {
-		l.Log.SetLevel(logrus.DebugLevel)
-		l.Log.Debugln("Verbose (debug) logging enabled")
-	}
+	l.InitLogger(verbose.Val(false))
 
 	config, err := loadConfig("workingCopies.yaml") // Replace with your config file name
 	if err != nil {
