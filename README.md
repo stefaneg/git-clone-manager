@@ -57,7 +57,9 @@ go build -o wcmanager
 
 
 # To do
-- Take arguments. Start with verbose output or not.
+- Create command that reports projects that are not on main branch
+- Create command that reports projects with dirty index
+- Create command that reports projects with unpushed changes.
 - Collect statistics - how many projects processed - checked out - archived
 - Report all projects that have a) have uncommitted changes b) are behind origin or without a tracked remote branch c) are checked out on a branch.
 - Create command to pull changes on projects on main and with a clean index.
