@@ -33,7 +33,7 @@ func (project *GitRepoSpec) CloneProject(cloneDirectory string, cloneArchived bo
 	}
 
 	l.Log.Infof("Cloning project to %s\n", projectPath)
-	err := os.MkdirAll(projectPath, 0755)
+	err := os.MkdirAll(projectPath, os.ModePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create directory %s: %v", projectPath, err)
 	}

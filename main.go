@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v2"
 	"io"
 	"net/http"
 	"os"
@@ -13,6 +11,8 @@ import (
 	"tools/internal/color"
 	"tools/internal/gitrepo"
 	l "tools/internal/log"
+
+	"gopkg.in/yaml.v2"
 )
 
 type Config struct {
@@ -40,18 +40,6 @@ type Project struct {
 type Subgroup struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
-}
-
-type CustomFormatter struct {
-	logrus.TextFormatter
-}
-
-func (f *CustomFormatter) Format(entry *logrus.Entry) ([]byte, error) {
-	if entry.Level == logrus.InfoLevel {
-		entry.Message = fmt.Sprintf("%s\n", entry.Message)
-		return []byte(entry.Message), nil
-	}
-	return f.TextFormatter.Format(entry)
 }
 
 func (gitlab GitLabConfig) GetCloneDirectory() string {
@@ -96,7 +84,8 @@ func main() {
 	flag.Parse()
 	l.InitLogger(verbose.Val(false))
 
-	config, err := loadConfig("workingCopies.yaml") // Replace with your config file name
+	config, err := loadConfig("workingCopies.yaml")
+
 	if err != nil {
 		l.Log.Fatalf("Failed to load configuration: %v", err)
 	}
@@ -116,7 +105,15 @@ func main() {
 
 		for _, group := range gitlab.Groups {
 			l.Log.Infof("Cloning projects in group  %s\n", color.FgCyan(group.ID))
-			err := gitlab.cloneGroupProjects(token, group)
+			projects, err := gitlab.getGroupProjects(token, group)
+
+			for _, project := range projects {
+				err := project.CloneProject(gitlab.CloneDirectory, group.CloneArchived)
+				if err != nil {
+					l.Log.Printf("Failed to clone project %s: %v", project.Name, err)
+				}
+			}
+
 			if err != nil {
 				l.Log.Printf("Failed to clone projects for group %s: %v", group.ID, err)
 			}
@@ -165,32 +162,28 @@ func loadConfig(configFileName string) (*Config, error) {
 	return &config, nil
 }
 
-func (gitlab GitLabConfig) cloneGroupProjects(token string, group Group) error {
+func (gitlab GitLabConfig) getGroupProjects(token string, group Group) ([]gitrepo.GitRepoSpec, error) {
 	// Fetch and clone all projects in the group
 	projects, err := gitlab.fetchProjects(token, group.ID)
 	if err != nil {
-		return fmt.Errorf("failed to fetch projects for group %s: %w", group.ID, err)
-	}
-	for _, project := range projects {
-		err := project.CloneProject(gitlab.CloneDirectory, group.CloneArchived)
-		if err != nil {
-			l.Log.Printf("Failed to clone project %s: %v", project.Name, err)
-		}
+		return nil, fmt.Errorf("failed to fetch projects for group %s: %w", group.ID, err)
 	}
 
 	// Fetch subgroups and recursively clone their projects
 	subgroups, err := gitlab.fetchSubgroups(token, group.ID)
 	if err != nil {
-		return fmt.Errorf("failed to fetch subgroups for group %s: %w", group.ID, err)
+		return nil, fmt.Errorf("failed to fetch subgroups for group %s: %w", group.ID, err)
 	}
 	for _, subgroup := range subgroups {
-		err := gitlab.cloneGroupProjects(token, Group{ID: fmt.Sprintf("%d", subgroup.ID), CloneArchived: group.CloneArchived})
+		subProjects, err := gitlab.getGroupProjects(token, Group{ID: fmt.Sprintf("%d", subgroup.ID), CloneArchived: group.CloneArchived})
 		if err != nil {
 			l.Log.Printf("Failed to clone projects for subgroup %s: %v", subgroup.Name, err)
+		} else {
+			projects = append(projects, subProjects...)
 		}
 	}
 
-	return nil
+	return projects, nil
 }
 
 func convertToGitlabProjectSpec(project Project, gitlab GitLabConfig) *gitrepo.GitRepoSpec {
