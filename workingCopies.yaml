@@ -6,7 +6,9 @@ gitlab:
 #      - id: "ops"
 #        cloneArchived: true
       - id: "catapult"
+        cloneArchived: false
       - id: "DevOps"
+        cloneArchived: false
     projects:
       - name: "Notes"
         fullPath: "gudlaugur.egilsson/notes"

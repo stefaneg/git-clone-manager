@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"tools/internal/color"
 	"tools/internal/gitrepo"
-	logger "tools/internal/log"
+	l "tools/internal/log"
 )
 
 type GitLabConfig struct {
@@ -41,7 +42,7 @@ func (gitlab GitLabConfig) getBaseUrl() string {
 	return fmt.Sprintf("https://%s/api/v4", gitlab.HostName)
 }
 
-func (gitlab GitLabConfig) FetchAllGroupsRecursively(token string, group *GitlabApiGroup) ([]GitlabApiGroup, error) {
+func (gitlab GitLabConfig) fetchAllGroupsRecursively(token string, group *GitlabApiGroup, groupChannel chan GitlabApiGroup) {
 	var allGroups []GitlabApiGroup
 
 	// Add the current group to the list
@@ -50,58 +51,66 @@ func (gitlab GitLabConfig) FetchAllGroupsRecursively(token string, group *Gitlab
 	// Fetch subgroups
 	subgroups, err := gitlab.fetchSubgroups(token, fmt.Sprintf("%d", group.ID))
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch subgroups for group %s: %w", group.ID, err)
+		l.Log.Errorf(fmt.Sprintf("failed to fetch subgroups for group %s: %w", group.ID, err))
 	}
-
 	// Recursively fetch subgroups for each of the subgroups
 	for _, subgroup := range subgroups {
-		subGroups, err := gitlab.FetchAllGroupsRecursively(token, &subgroup)
-		if err != nil {
-			logger.Log.Printf("Failed to fetch subgroups for group %s: %v", subgroup.Name, err)
-		} else {
-			allGroups = append(allGroups, subGroups...)
-		}
+		groupChannel <- subgroup
+		go gitlab.fetchAllGroupsRecursively(token, &subgroup, groupChannel)
 	}
-
-	return allGroups, nil
 }
 
-func (gitlab GitLabConfig) fetchProjectsForGroups(token string, groups []GitlabApiGroup) ([]gitrepo.GitRepoSpec, error) {
+func (gitlab GitLabConfig) fetchProjectsForGroup(token string, group GitlabApiGroup, projectChannel chan gitrepo.GitRepoSpec) {
 	var allProjects []gitrepo.GitRepoSpec
 
-	for _, group := range groups {
-		projects, err := gitlab.fetchProjects(token, fmt.Sprintf("%d", group.ID))
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch projects for group %d: %w", group.ID, err)
+	projects, err := gitlab.fetchProjects(token, group)
+	if err != nil {
+		l.Log.Printf("Failed to fetch projects for group %s: %v", group.Name, err)
+	}
+	allProjects = append(allProjects, projects...)
+	for _, project := range projects {
+		projectChannel <- project
+	}
+}
+
+func (gitlab GitLabConfig) GetGroupProjects(token string, group GitLabConfigGroup, repoChannel chan gitrepo.GitRepoSpec, fetchWaitGroup *sync.WaitGroup) error {
+
+	l.Log.Debugf("Opening channel for %s", color.FgMagenta(group.ID))
+	groupChannel := make(chan GitlabApiGroup, 10)
+
+	go func() {
+		for {
+			receivedGroup, ok := <-groupChannel
+			if !ok {
+				l.Log.Debugf("%s %s \n", color.FgRed("Channel close, breaking"), group.ID)
+				break
+			}
+			l.Log.Debugf(color.FgGreen("RECEIVIED group ", len(receivedGroup.Name)))
+			go func() {
+				fetchWaitGroup.Add(1)
+				defer fetchWaitGroup.Done()
+				gitlab.fetchAllGroupsRecursively(token, &receivedGroup, groupChannel)
+			}()
+			go func() {
+				fetchWaitGroup.Add(1)
+				defer fetchWaitGroup.Done()
+				gitlab.fetchProjectsForGroup(token, receivedGroup, repoChannel)
+			}()
 		}
-		allProjects = append(allProjects, projects...)
-	}
+	}()
 
-	return allProjects, nil
+	rootGroup, err := gitlab.fetchGroupInfo(token, group.ID, groupChannel)
+	if err != nil {
+		return fmt.Errorf("failed to fetch group info for group %s: %w", group.ID, err)
+	}
+	go gitlab.fetchAllGroupsRecursively(token, rootGroup, groupChannel)
+
+	return nil
 }
 
-func (gitlab GitLabConfig) GetGroupProjects(token string, group GitLabConfigGroup) ([]gitrepo.GitRepoSpec, error) {
-
-	rootGroup, err := gitlab.fetchGroupInfo(token, group.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch group info for group %s: %w", group.ID, err)
-	}
-	allGroups, err := gitlab.FetchAllGroupsRecursively(token, rootGroup)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch all groups recursively %s: %w", group.ID, err)
-	}
-
-	allProjects, err := gitlab.fetchProjectsForGroups(token, allGroups)
-	if err != nil {
-		return nil, err
-	}
-
-	return allProjects, nil
-}
-
-func (gitlab GitLabConfig) fetchProjects(token, groupID string) ([]gitrepo.GitRepoSpec, error) {
-	logger.Log.Debugf("Fetching projects in group %s\n", color.FgCyan(groupID))
-	url := fmt.Sprintf("%s/groups/%s/projects", gitlab.getBaseUrl(), groupID)
+func (gitlab GitLabConfig) fetchProjects(token string, group GitlabApiGroup) ([]gitrepo.GitRepoSpec, error) {
+	l.Log.Debugf("Fetching projects in group %s\n", color.FgCyan(group))
+	url := fmt.Sprintf("%s/groups/%d/projects", gitlab.getBaseUrl(), group.ID)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -117,7 +126,7 @@ func (gitlab GitLabConfig) fetchProjects(token, groupID string) ([]gitrepo.GitRe
 	defer func(body io.ReadCloser) {
 		err := body.Close()
 		if err != nil {
-			logger.Log.Errorf("Failed to close response body: %v", err)
+			l.Log.Errorf("Failed to close response body: %v", err)
 		}
 	}(resp.Body)
 
@@ -134,7 +143,7 @@ func (gitlab GitLabConfig) fetchProjects(token, groupID string) ([]gitrepo.GitRe
 }
 
 func (gitlab GitLabConfig) fetchSubgroups(token, groupID string) ([]GitlabApiGroup, error) {
-	logger.Log.Debugf("Fetching subgroups in group %s", color.FgCyan(groupID))
+	l.Log.Debugf("Fetching subgroups in group %s", color.FgCyan(groupID))
 	url := fmt.Sprintf("%s/groups/%s/subgroups", gitlab.getBaseUrl(), groupID)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -151,7 +160,7 @@ func (gitlab GitLabConfig) fetchSubgroups(token, groupID string) ([]GitlabApiGro
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
-			logger.Log.Errorf("Failed to close response body: %v", err)
+			l.Log.Errorf("Failed to close response body: %v", err)
 		}
 	}(resp.Body)
 
@@ -177,7 +186,7 @@ func (project GitLabConfigProject) AsGitRepoSpec(gitlab GitLabConfig) *gitrepo.G
 	return &gitlabProjectSpec
 }
 
-func (gitlab GitLabConfig) fetchGroupInfo(token string, groupID string) (*GitlabApiGroup, error) {
+func (gitlab GitLabConfig) fetchGroupInfo(token string, groupID string, channel chan GitlabApiGroup) (*GitlabApiGroup, error) {
 	url := fmt.Sprintf("%s/groups/%s", gitlab.getBaseUrl(), groupID)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -201,6 +210,6 @@ func (gitlab GitLabConfig) fetchGroupInfo(token string, groupID string) (*Gitlab
 	if err := json.NewDecoder(resp.Body).Decode(&group); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
-
+	channel <- group
 	return &group, nil
 }

@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 	"tools/gitlab"
 	"tools/internal/color"
+	"tools/internal/gitrepo"
 	l "tools/internal/log"
 	typex "tools/type"
 
@@ -30,7 +32,10 @@ func main() {
 
 	if err != nil {
 		l.Log.Fatalf("Failed to load configuration: %v", err)
+		os.Exit(1)
 	}
+
+	fetchWaitGroup := sync.WaitGroup{}
 
 	for _, gitLabConfig := range config.GitLab {
 		l.Log.Infof("Cloning groups/projects in %s into %s", color.FgCyan(gitLabConfig.HostName), color.FgCyan(gitLabConfig.CloneDirectory))
@@ -46,18 +51,33 @@ func main() {
 		}
 
 		for _, group := range gitLabConfig.Groups {
-			l.Log.Infof("Cloning projects in group  %s\n", color.FgCyan(group.ID))
-			projects, err := gitLabConfig.GetGroupProjects(token, group)
 
-			for _, project := range projects {
-				err := project.CloneProject(gitLabConfig.CloneDirectory, group.CloneArchived)
-				if err != nil {
-					l.Log.Printf("Failed to clone project %s: %v", project.Name, err)
+			groupRepoChannel := make(chan gitrepo.GitRepoSpec, 10)
+
+			go func() {
+				for {
+					receivedRepo, ok := <-groupRepoChannel
+					if !ok {
+						l.Log.Debugf("%s %s \n", color.FgRed("Channel close, breaking"), group.ID)
+						break
+					}
+					l.Log.Debugf("Channel receive, cloning %s %t \n", color.FgCyan(receivedRepo.PathWithNamespace), group.CloneArchived)
+					go func() {
+						fetchWaitGroup.Add(1)
+						defer fetchWaitGroup.Done()
+						err := receivedRepo.CloneProject(gitLabConfig.CloneDirectory, group.CloneArchived)
+						if err != nil {
+							l.Log.Printf("Failed to clone project %s: %v", receivedRepo.Name, err)
+						}
+
+					}()
 				}
-			}
+			}()
+
+			err := gitLabConfig.GetGroupProjects(token, group, groupRepoChannel, &fetchWaitGroup)
 
 			if err != nil {
-				l.Log.Printf("Failed to clone projects for group %s: %v", group.ID, err)
+				l.Log.Printf("Failed to get projects for group %s: %v", group.ID, err)
 			}
 		}
 
@@ -73,6 +93,7 @@ func main() {
 			}
 		}
 	}
+	fetchWaitGroup.Wait()
 	l.Log.Infof(color.FgGreen("Done in %.2f seconds!"), time.Since(startTime).Seconds())
 }
 
