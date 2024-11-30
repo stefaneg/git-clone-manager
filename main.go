@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
-	"tools/gitlab"
 	"tools/internal/color"
+	"tools/internal/gitlab"
 	"tools/internal/gitrepo"
 	l "tools/internal/log"
 	typex "tools/type"
@@ -36,6 +36,7 @@ func main() {
 	}
 
 	fetchWaitGroup := sync.WaitGroup{}
+	cloneWaitGroup := sync.WaitGroup{}
 
 	for _, gitLabConfig := range config.GitLab {
 		l.Log.Infof("Cloning groups/projects in %s into %s", color.FgCyan(gitLabConfig.HostName), color.FgCyan(gitLabConfig.CloneDirectory))
@@ -50,31 +51,53 @@ func main() {
 			continue
 		}
 
+		gitRepoChannel := make(chan gitrepo.Repository, 10)
+
+		go func() {
+			for {
+				receivedProject, ok := <-gitRepoChannel
+				if !ok {
+					l.Log.Debugf("%s %s \n", color.FgRed("Clone channel close, breaking"))
+					break
+				}
+
+				cloneWaitGroup.Add(1)
+				go func() {
+					err := receivedProject.CloneProject(gitLabConfig.CloneDirectory)
+					if err != nil {
+						l.Log.Printf("Failed to clone project %s: %v", receivedProject.Name, err)
+					}
+					cloneWaitGroup.Done()
+				}()
+			}
+
+		}()
+
+		// Iterate through configured groups and fetch gitlab projects
 		for _, group := range gitLabConfig.Groups {
 
-			groupRepoChannel := make(chan gitrepo.GitRepoSpec, 10)
+			groupProjectChannel := make(chan gitlab.ProjectMetadata, 10)
 
 			go func() {
 				for {
-					receivedRepo, ok := <-groupRepoChannel
+					receivedProject, ok := <-groupProjectChannel
 					if !ok {
 						l.Log.Debugf("%s %s \n", color.FgRed("Channel close, breaking"), group.ID)
 						break
 					}
-					l.Log.Debugf("Channel receive, cloning %s %t \n", color.FgCyan(receivedRepo.PathWithNamespace), group.CloneArchived)
-					go func() {
-						fetchWaitGroup.Add(1)
-						defer fetchWaitGroup.Done()
-						err := receivedRepo.CloneProject(gitLabConfig.CloneDirectory, group.CloneArchived)
-						if err != nil {
-							l.Log.Printf("Failed to clone project %s: %v", receivedRepo.Name, err)
-						}
-
-					}()
+					gitRepo := gitrepo.Repository{
+						Name:              receivedProject.Name,
+						SSHURLToRepo:      receivedProject.SSHURLToRepo,
+						PathWithNamespace: receivedProject.PathWithNamespace,
+						Archived:          receivedProject.Archived,
+						GroupMetaData:     group,
+					}
+					gitRepoChannel <- gitRepo
+					l.Log.Debugf("Channel receive, cloning %s %t \n", color.FgCyan(receivedProject.PathWithNamespace), group.CloneArchived)
 				}
 			}()
 
-			err := gitLabConfig.GetGroupProjects(token, group, groupRepoChannel, &fetchWaitGroup)
+			err := gitLabConfig.GetGroupProjects(token, group, groupProjectChannel, &fetchWaitGroup)
 
 			if err != nil {
 				l.Log.Printf("Failed to get projects for group %s: %v", group.ID, err)
@@ -82,18 +105,21 @@ func main() {
 		}
 
 		for _, prj := range gitLabConfig.Projects {
-			repo := prj.AsGitRepoSpec(gitLabConfig)
+			repo := gitrepo.CreateFromGitRemoteConfig(prj, gitLabConfig.HostName)
 			if err != nil {
 				l.Log.Printf("Failed to fetch repo %s: %v", prj.FullPath, err)
 				continue
 			}
-			err = repo.CloneProject(gitLabConfig.CloneDirectory, true)
+			err = repo.CloneProject(gitLabConfig.CloneDirectory)
 			if err != nil {
 				l.Log.Printf("Failed to clone repo %s: %v", repo.Name, err)
 			}
 		}
 	}
+	// NEXT: Get this into a proper pipe pattern, closing channels when wait groups finish.
+	// THEN add tests.
 	fetchWaitGroup.Wait()
+	cloneWaitGroup.Wait()
 	l.Log.Infof(color.FgGreen("Done in %.2f seconds!"), time.Since(startTime).Seconds())
 }
 

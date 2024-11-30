@@ -7,16 +7,16 @@ import (
 	"net/http"
 	"sync"
 	"tools/internal/color"
-	"tools/internal/gitrepo"
+	"tools/internal/gitremote"
 	l "tools/internal/log"
 )
 
 type GitLabConfig struct {
-	EnvTokenVariableName string                `yaml:"tokenEnvVar"`    // The environment variable name for the GitLab token
-	HostName             string                `yaml:"hostName"`       // Gitlab host name
-	CloneDirectory       string                `yaml:"cloneDirectory"` // Where to clone projects in local directory structure
-	Groups               []GitLabConfigGroup   `yaml:"groups"`
-	Projects             []GitLabConfigProject `yaml:"projects"`
+	EnvTokenVariableName string                             `yaml:"tokenEnvVar"`    // The environment variable name for the GitLab token
+	HostName             string                             `yaml:"hostName"`       // Gitlab host name
+	CloneDirectory       string                             `yaml:"cloneDirectory"` // Where to clone projects in local directory structure
+	Groups               []GitLabConfigGroup                `yaml:"groups"`
+	Projects             []gitremote.GitRemoteProjectConfig `yaml:"projects"`
 }
 
 type GitLabConfigGroup struct {
@@ -24,14 +24,16 @@ type GitLabConfigGroup struct {
 	CloneArchived bool   `yaml:"cloneArchived"`
 }
 
-type GitLabConfigProject struct {
-	Name     string `yaml:"name"`
-	FullPath string `yaml:"fullPath"`
-}
-
 type GitlabApiGroup struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
+}
+
+type ProjectMetadata struct {
+	Name              string `json:"name"`
+	SSHURLToRepo      string `json:"ssh_url_to_repo"`
+	PathWithNamespace string `json:"path_with_namespace"`
+	Archived          bool   `json:"archived"`
 }
 
 func (gitlab GitLabConfig) GetCloneDirectory() string {
@@ -60,8 +62,8 @@ func (gitlab GitLabConfig) fetchAllGroupsRecursively(token string, group *Gitlab
 	}
 }
 
-func (gitlab GitLabConfig) fetchProjectsForGroup(token string, group GitlabApiGroup, projectChannel chan gitrepo.GitRepoSpec) {
-	var allProjects []gitrepo.GitRepoSpec
+func (gitlab GitLabConfig) fetchProjectsForGroup(token string, group GitlabApiGroup, projectChannel chan ProjectMetadata) {
+	var allProjects []ProjectMetadata
 
 	projects, err := gitlab.fetchProjects(token, group)
 	if err != nil {
@@ -73,7 +75,7 @@ func (gitlab GitLabConfig) fetchProjectsForGroup(token string, group GitlabApiGr
 	}
 }
 
-func (gitlab GitLabConfig) GetGroupProjects(token string, group GitLabConfigGroup, repoChannel chan gitrepo.GitRepoSpec, fetchWaitGroup *sync.WaitGroup) error {
+func (gitlab GitLabConfig) GetGroupProjects(token string, group GitLabConfigGroup, repoChannel chan ProjectMetadata, fetchWaitGroup *sync.WaitGroup) error {
 
 	l.Log.Debugf("Opening channel for %s", color.FgMagenta(group.ID))
 	groupChannel := make(chan GitlabApiGroup, 10)
@@ -108,7 +110,7 @@ func (gitlab GitLabConfig) GetGroupProjects(token string, group GitLabConfigGrou
 	return nil
 }
 
-func (gitlab GitLabConfig) fetchProjects(token string, group GitlabApiGroup) ([]gitrepo.GitRepoSpec, error) {
+func (gitlab GitLabConfig) fetchProjects(token string, group GitlabApiGroup) ([]ProjectMetadata, error) {
 	l.Log.Debugf("Fetching projects in group %s\n", color.FgCyan(group))
 	url := fmt.Sprintf("%s/groups/%d/projects", gitlab.getBaseUrl(), group.ID)
 
@@ -134,7 +136,7 @@ func (gitlab GitLabConfig) fetchProjects(token string, group GitlabApiGroup) ([]
 		return nil, fmt.Errorf("GitLab API request failed with status: %s", resp.Status)
 	}
 
-	var projects []gitrepo.GitRepoSpec
+	var projects []ProjectMetadata
 	if err := json.NewDecoder(resp.Body).Decode(&projects); err != nil {
 		return nil, err
 	}
@@ -174,16 +176,6 @@ func (gitlab GitLabConfig) fetchSubgroups(token, groupID string) ([]GitlabApiGro
 	}
 
 	return subgroups, nil
-}
-
-func (project GitLabConfigProject) AsGitRepoSpec(gitlab GitLabConfig) *gitrepo.GitRepoSpec {
-	var gitlabProjectSpec = gitrepo.GitRepoSpec{
-		Name:              project.Name,
-		PathWithNamespace: project.FullPath,
-		SSHURLToRepo:      fmt.Sprintf("git@%s:%s", gitlab.HostName, project.FullPath),
-	}
-
-	return &gitlabProjectSpec
 }
 
 func (gitlab GitLabConfig) fetchGroupInfo(token string, groupID string, channel chan GitlabApiGroup) (*GitlabApiGroup, error) {

@@ -6,28 +6,33 @@ import (
 	"os"
 	"path"
 	"tools/internal/color"
+	"tools/internal/gitlab"
+	"tools/internal/gitremote"
 	l "tools/internal/log"
 	"tools/internal/sh"
 )
 
-type GitRepoSpec struct {
+type Repository struct {
 	Name              string `json:"name"`
 	SSHURLToRepo      string `json:"ssh_url_to_repo"`
 	PathWithNamespace string `json:"path_with_namespace"`
 	Archived          bool   `json:"archived"`
+	GroupMetaData     gitlab.GitLabConfigGroup
+	ProjectMetaData   gitlab.ProjectMetadata
+	GroupConfig       gitlab.GitLabConfigGroup
 }
 
-func (project *GitRepoSpec) CloneProject(cloneDirectory string, cloneArchived bool) error {
+func (project *Repository) CloneProject(cloneDirectory string) error {
 	projectPath := project.getProjectPath(cloneDirectory)
 
 	// Check if the project directory already exists
 	if _, err := os.Stat(projectPath); !os.IsNotExist(err) {
 		if l.Log.GetLevel() >= logrus.DebugLevel {
-			l.Log.Debugf("GitRepoSpec %s already exists at %s, skipping clone\n", project.Name, projectPath)
+			l.Log.Debugf("Repository %s already exists at %s, skipping clone\n", project.Name, projectPath)
 		}
 		return nil // Skip cloning if directory already exists
 	}
-	if !cloneArchived && project.Archived {
+	if !project.cloneArchived() && project.Archived {
 		fmt.Printf("Skipping archived project %s %s\n", project.Name, projectPath)
 		return nil
 	}
@@ -53,13 +58,13 @@ func (project *GitRepoSpec) CloneProject(cloneDirectory string, cloneArchived bo
 	return nil
 }
 
-func (project *GitRepoSpec) getProjectPath(cloneDirectory string) string {
+func (project *Repository) getProjectPath(cloneDirectory string) string {
 	projectPath := path.Join(cloneDirectory, project.PathWithNamespace)
 	return projectPath
 }
 
 // WriteArchivedMarker creates an "ARCHIVED.txt" file in the root directory of the archived project
-func (project *GitRepoSpec) WriteArchivedMarker(projectPath string) error {
+func (project *Repository) WriteArchivedMarker(projectPath string) error {
 	// Define the path for the ARCHIVED.txt marker file
 	markerFilePath := path.Join(projectPath, "ARCHIVED.txt")
 
@@ -85,4 +90,17 @@ func (project *GitRepoSpec) WriteArchivedMarker(projectPath string) error {
 		l.Log.Debugf("ARCHIVED.txt marker file created at %s\n", color.FgCyan(markerFilePath))
 	}
 	return nil
+}
+
+func (project *Repository) cloneArchived() bool {
+	return project.GroupConfig.CloneArchived
+}
+
+func CreateFromGitRemoteConfig(project gitremote.GitRemoteProjectConfig, hostName string) *Repository {
+	var gitRepo = Repository{
+		Name:              project.Name,
+		PathWithNamespace: project.FullPath,
+		SSHURLToRepo:      fmt.Sprintf("git@%s:%s", hostName, project.FullPath),
+	}
+	return &gitRepo
 }
