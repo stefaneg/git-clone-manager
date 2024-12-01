@@ -68,11 +68,11 @@ func main() {
 			// Get subgroups and projects
 			gitlabProjectChannel := make(chan gitlab.ProjectMetadata, 100)
 			projectChannels = append(projectChannels, gitlabProjectChannel)
-			go gitLabConfig.OpenGroupProjectChannel(token, group, gitlabProjectChannel)
+			go gitLabConfig.ChannelProjects(token, group, gitlabProjectChannel)
 
 		}
 
-		// Iterate
+		// Iterate through directly referred projects
 		for _, prj := range gitLabConfig.Projects {
 			repo := gitrepo.CreateFromGitRemoteConfig(prj, gitLabConfig.HostName, gitLabConfig.CloneDirectory)
 			gitCloneChannel <- *repo
@@ -83,37 +83,38 @@ func main() {
 		for {
 			project, ok := <-combinedProjectChannel
 			if !ok {
-				Log.Debugf("%s \n", color.FgRed("All projects processed, breaking!!!!"))
+				Log.Tracef("%s \n", color.FgRed("All projects processed, breaking!!!!"))
 				break
 			}
 			gitlabProjectChannel <- project
 		}
-		Log.Debugf("Closing combined project channel")
+		Log.Tracef("Closing combined project channel")
 		close(gitlabProjectChannel)
 	}()
 
 	cloneWaitGroup := sync.WaitGroup{}
+	cloneCount := 0
 	for {
 		receivedRepo, ok := <-gitCloneChannel
 		if !ok {
-			Log.Debugf("%s \n", color.FgRed("Clone channel close, wait for last clone to finish, then breaking"))
+			Log.Tracef("%s \n", "Clone channel close, wait for last clone to finish, then breaking")
 			cloneWaitGroup.Wait()
 			break
 		}
-
+		cloneCount++
 		cloneWaitGroup.Add(1)
 		go func() {
+			defer cloneWaitGroup.Done()
+			// NEXT: Deal with rate limit on git clone operations somehow.
+			// Add tests....
 			err := receivedRepo.CloneProject()
 			if err != nil {
-				Log.Printf("Failed to clone project %s: %v", receivedRepo.Name, err)
+				Log.Errorf("Failed to clone project %s: %v", color.FgRed(receivedRepo.Name), err)
 			}
-			cloneWaitGroup.Done()
 		}()
 	}
 
-	// NEXT: Get this into a proper pipe pattern, closing channels when wait groups finish.
-	// THEN add tests.
-	Log.Infof(color.FgGreen("Done in %.2f seconds!"), time.Since(startTime).Seconds())
+	Log.Infof(color.FgGreen("%d repos, took %.2f seconds"), cloneCount, time.Since(startTime).Seconds())
 }
 
 func pipeProjectsToRepos(gitlabProjectChannel chan gitlab.ProjectMetadata, gitRepoChannel chan gitrepo.Repository) func() {

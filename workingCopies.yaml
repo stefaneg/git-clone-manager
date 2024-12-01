@@ -1,7 +1,7 @@
 gitlab:
   - tokenEnvVar: "GITLAB_API_TOKEN"
     hostName: 'gitlab.controlant.com'
-    cloneDirectory: '/Users/gudlaugur.egilsson/src/controlant_test' # Use full path only. Shell expansion not supported (f.ex. ~)
+    cloneDirectory: './cloned_projects' # Use full path only. Shell expansion not supported (f.ex. ~)
     groups:
       - id: "ops"
         cloneArchived: true

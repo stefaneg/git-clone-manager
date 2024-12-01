@@ -7,7 +7,7 @@ import (
 	"path"
 	"tools/internal/color"
 	"tools/internal/gitremote"
-	l "tools/internal/log"
+	. "tools/internal/log"
 	"tools/internal/sh"
 )
 
@@ -28,26 +28,29 @@ func (project *Repository) CloneProject() error {
 	projectPath := project.getProjectPath(project.CloneOptions.CloneRootDirectory())
 
 	// Check if the project directory already exists
-	if _, err := os.Stat(projectPath); !os.IsNotExist(err) {
-		if l.Log.GetLevel() >= logrus.DebugLevel {
-			l.Log.Debugf("Repository %s already exists at %s, skipping clone\n", project.Name, projectPath)
+	if _, err := os.Stat(path.Join(projectPath, ".git")); !os.IsNotExist(err) {
+		if Log.GetLevel() >= logrus.DebugLevel {
+			Log.Debugf("Git repository %s already exists at %s, skipping clone\n", color.FgMagenta(project.Name), color.FgMagenta(projectPath))
 		}
 		return nil // Skip cloning if directory already exists
 	}
 	if !project.cloneArchived() && project.Archived {
-		fmt.Printf("Skipping archived project %s %s\n", project.Name, projectPath)
+		if Log.GetLevel() >= logrus.DebugLevel {
+			Log.Debugf("Skipping archived project %s %s", color.FgMagenta(project.Name), color.FgMagenta(projectPath))
+		}
 		return nil
 	}
 
-	l.Log.Infof("Cloning project to %s\n", projectPath)
+	Log.Infof("Cloning %s to %s", color.FgMagenta(project.Name), color.FgMagenta(projectPath))
 	err := os.MkdirAll(projectPath, os.ModePerm)
 	if err != nil {
-		return fmt.Errorf("failed to create directory %s: %v", projectPath, err)
+		return fmt.Errorf("failed to create directory %s: %v", color.FgRed(projectPath), err)
 	}
-	output, err := sh.ExecuteShellCommand(sh.DirectoryPath(projectPath), sh.ShellCommand(fmt.Sprintf("git clone %s", project.SSHURLToRepo)))
+	cloneCmd := fmt.Sprintf("git clone %s .", project.SSHURLToRepo)
+	_, err = sh.ExecuteShellCommand(sh.DirectoryPath(projectPath), sh.ShellCommand(cloneCmd))
 
 	if err != nil {
-		return fmt.Errorf("git clone failed: %s", output)
+		return fmt.Errorf("in %s, %s failed: %s", color.FgRed(projectPath), cloneCmd, err)
 	}
 
 	if project.Archived {
@@ -73,13 +76,13 @@ func (project *Repository) WriteArchivedMarker(projectPath string) error {
 	// Create the marker file
 	file, err := os.Create(markerFilePath)
 	if err != nil {
-		l.Log.Errorf("failed to create marker file: %w", err)
+		Log.Errorf("failed to create marker file: %w", err)
 		return err
 	}
 	defer func(file *os.File) {
 		err := file.Close()
 		if err != nil {
-			l.Log.Errorf("failed to close marker file: %w", err)
+			Log.Errorf("failed to close marker file: %w", err)
 		}
 	}(file)
 
@@ -88,8 +91,8 @@ func (project *Repository) WriteArchivedMarker(projectPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to write to marker file: %w", err)
 	}
-	if l.Log.GetLevel() >= logrus.DebugLevel {
-		l.Log.Debugf("ARCHIVED.txt marker file created at %s\n", color.FgCyan(markerFilePath))
+	if Log.GetLevel() >= logrus.DebugLevel {
+		Log.Debugf("ARCHIVED.txt marker file created at %s\n", color.FgCyan(markerFilePath))
 	}
 	return nil
 }
