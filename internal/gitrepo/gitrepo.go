@@ -6,24 +6,26 @@ import (
 	"os"
 	"path"
 	"tools/internal/color"
-	"tools/internal/gitlab"
 	"tools/internal/gitremote"
 	l "tools/internal/log"
 	"tools/internal/sh"
 )
 
 type Repository struct {
-	Name              string `json:"name"`
-	SSHURLToRepo      string `json:"ssh_url_to_repo"`
-	PathWithNamespace string `json:"path_with_namespace"`
-	Archived          bool   `json:"archived"`
-	GroupMetaData     gitlab.GitLabConfigGroup
-	ProjectMetaData   gitlab.ProjectMetadata
-	GroupConfig       gitlab.GitLabConfigGroup
+	Name              string
+	SSHURLToRepo      string
+	PathWithNamespace string
+	Archived          bool
+	CloneOptions      CloneOptions
 }
 
-func (project *Repository) CloneProject(cloneDirectory string) error {
-	projectPath := project.getProjectPath(cloneDirectory)
+type CloneOptions interface {
+	CloneArchived() bool
+	CloneRootDirectory() string
+}
+
+func (project *Repository) CloneProject() error {
+	projectPath := project.getProjectPath(project.CloneOptions.CloneRootDirectory())
 
 	// Check if the project directory already exists
 	if _, err := os.Stat(projectPath); !os.IsNotExist(err) {
@@ -93,14 +95,29 @@ func (project *Repository) WriteArchivedMarker(projectPath string) error {
 }
 
 func (project *Repository) cloneArchived() bool {
-	return project.GroupConfig.CloneArchived
+	return project.CloneOptions.CloneArchived()
 }
 
-func CreateFromGitRemoteConfig(project gitremote.GitRemoteProjectConfig, hostName string) *Repository {
+type RemoteCloneOptions struct {
+	cloneDirectory string
+}
+
+func (rco RemoteCloneOptions) CloneRootDirectory() string {
+	return rco.cloneDirectory
+}
+
+func (_ RemoteCloneOptions) CloneArchived() bool {
+	return true
+}
+
+func CreateFromGitRemoteConfig(project gitremote.GitRemoteProjectConfig, hostName string, cloneDirectory string) *Repository {
+	opts := RemoteCloneOptions{cloneDirectory: cloneDirectory}
+
 	var gitRepo = Repository{
 		Name:              project.Name,
 		PathWithNamespace: project.FullPath,
 		SSHURLToRepo:      fmt.Sprintf("git@%s:%s", hostName, project.FullPath),
+		CloneOptions:      opts,
 	}
 	return &gitRepo
 }

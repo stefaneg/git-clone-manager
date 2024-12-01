@@ -1,19 +1,19 @@
 gitlab:
   - tokenEnvVar: "GITLAB_API_TOKEN"
     hostName: 'gitlab.controlant.com'
-    cloneDirectory: '/Users/gudlaugur.egilsson/src/controlant' # Use full path only. Shell expansion not supported (f.ex. ~)
+    cloneDirectory: '/Users/gudlaugur.egilsson/src/controlant_test' # Use full path only. Shell expansion not supported (f.ex. ~)
     groups:
-#      - id: "ops"
-#        cloneArchived: true
+      - id: "ops"
+        cloneArchived: true
       - id: "catapult"
         cloneArchived: false
       - id: "DevOps"
         cloneArchived: false
-    projects:
-      - name: "Notes"
-        fullPath: "gudlaugur.egilsson/notes"
-      - name: "Tools"
-        fullPath: "gudlaugur.egilsson/tools"
+#    projects:
+#      - name: "Notes"
+#        fullPath: "gudlaugur.egilsson/notes"
+#      - name: "Tools"
+#        fullPath: "gudlaugur.egilsson/tools"
 #      - name: "test-automation-reporter"
 #        fullPath: "qaet/test-automation-reporter"
 #      - name: "ci-central"

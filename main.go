@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/samber/lo"
 	"os"
 	"path/filepath"
 	"sync"
@@ -10,7 +11,7 @@ import (
 	"tools/internal/color"
 	"tools/internal/gitlab"
 	"tools/internal/gitrepo"
-	l "tools/internal/log"
+	. "tools/internal/log"
 	typex "tools/type"
 
 	"gopkg.in/yaml.v2"
@@ -21,106 +22,118 @@ type Config struct {
 }
 
 func main() {
+
+	//f, _ := os.Create("trace.out")
+	//defer f.Close()
+	//trace.Start(f)
+	//defer trace.Stop()
+
 	var verbose = typex.NullableBool{}
 	startTime := time.Now()
 
 	flag.Var(&verbose, "verbose", "Print verbose output")
 	flag.Parse()
-	l.InitLogger(verbose.Val(false))
+	InitLogger(verbose.Val(false))
 
 	config, err := loadConfig("workingCopies.yaml")
 
 	if err != nil {
-		l.Log.Fatalf("Failed to load configuration: %v", err)
+		Log.Fatalf("Failed to load configuration: %v", err)
 		os.Exit(1)
 	}
 
-	fetchWaitGroup := sync.WaitGroup{}
-	cloneWaitGroup := sync.WaitGroup{}
+	gitlabProjectChannel := make(chan gitlab.ProjectMetadata, 20)
+	gitCloneChannel := make(chan gitrepo.Repository, 20)
+
+	// Receive channelled projects, instantiate git repository for each project
+	go pipeProjectsToRepos(gitlabProjectChannel, gitCloneChannel)()
+
+	var projectChannels []<-chan gitlab.ProjectMetadata
 
 	for _, gitLabConfig := range config.GitLab {
-		l.Log.Infof("Cloning groups/projects in %s into %s", color.FgCyan(gitLabConfig.HostName), color.FgCyan(gitLabConfig.CloneDirectory))
+		Log.Infof("Cloning groups/projects in %s into %s", color.FgCyan(gitLabConfig.HostName), color.FgCyan(gitLabConfig.CloneDirectory))
 		err = os.MkdirAll(gitLabConfig.GetCloneDirectory(), os.ModePerm)
 		if err != nil {
-			l.Log.Fatalf("Failed to create clone directory: %v", err)
+			Log.Fatalf("Failed to create clone directory: %v", err)
 		}
 
 		token := os.Getenv(gitLabConfig.EnvTokenVariableName)
 		if token == "" {
-			l.Log.Printf("Environment variable %s not set; skipping", gitLabConfig.EnvTokenVariableName)
+			Log.Printf("Environment variable %s not set; skipping", gitLabConfig.EnvTokenVariableName)
 			continue
 		}
 
-		gitRepoChannel := make(chan gitrepo.Repository, 10)
-
-		go func() {
-			for {
-				receivedProject, ok := <-gitRepoChannel
-				if !ok {
-					l.Log.Debugf("%s %s \n", color.FgRed("Clone channel close, breaking"))
-					break
-				}
-
-				cloneWaitGroup.Add(1)
-				go func() {
-					err := receivedProject.CloneProject(gitLabConfig.CloneDirectory)
-					if err != nil {
-						l.Log.Printf("Failed to clone project %s: %v", receivedProject.Name, err)
-					}
-					cloneWaitGroup.Done()
-				}()
-			}
-
-		}()
-
-		// Iterate through configured groups and fetch gitlab projects
+		// Iterate through configured groups and fetch gitlab groups
 		for _, group := range gitLabConfig.Groups {
+			// Get subgroups and projects
+			gitlabProjectChannel := make(chan gitlab.ProjectMetadata, 100)
+			projectChannels = append(projectChannels, gitlabProjectChannel)
+			go gitLabConfig.OpenGroupProjectChannel(token, group, gitlabProjectChannel)
 
-			groupProjectChannel := make(chan gitlab.ProjectMetadata, 10)
-
-			go func() {
-				for {
-					receivedProject, ok := <-groupProjectChannel
-					if !ok {
-						l.Log.Debugf("%s %s \n", color.FgRed("Channel close, breaking"), group.ID)
-						break
-					}
-					gitRepo := gitrepo.Repository{
-						Name:              receivedProject.Name,
-						SSHURLToRepo:      receivedProject.SSHURLToRepo,
-						PathWithNamespace: receivedProject.PathWithNamespace,
-						Archived:          receivedProject.Archived,
-						GroupMetaData:     group,
-					}
-					gitRepoChannel <- gitRepo
-					l.Log.Debugf("Channel receive, cloning %s %t \n", color.FgCyan(receivedProject.PathWithNamespace), group.CloneArchived)
-				}
-			}()
-
-			err := gitLabConfig.GetGroupProjects(token, group, groupProjectChannel, &fetchWaitGroup)
-
-			if err != nil {
-				l.Log.Printf("Failed to get projects for group %s: %v", group.ID, err)
-			}
 		}
 
+		// Iterate
 		for _, prj := range gitLabConfig.Projects {
-			repo := gitrepo.CreateFromGitRemoteConfig(prj, gitLabConfig.HostName)
-			if err != nil {
-				l.Log.Printf("Failed to fetch repo %s: %v", prj.FullPath, err)
-				continue
-			}
-			err = repo.CloneProject(gitLabConfig.CloneDirectory)
-			if err != nil {
-				l.Log.Printf("Failed to clone repo %s: %v", repo.Name, err)
-			}
+			repo := gitrepo.CreateFromGitRemoteConfig(prj, gitLabConfig.HostName, gitLabConfig.CloneDirectory)
+			gitCloneChannel <- *repo
 		}
 	}
+	combinedProjectChannel := lo.FanIn(10, projectChannels...)
+	go func() {
+		for {
+			project, ok := <-combinedProjectChannel
+			if !ok {
+				Log.Debugf("%s \n", color.FgRed("All projects processed, breaking!!!!"))
+				break
+			}
+			gitlabProjectChannel <- project
+		}
+		Log.Debugf("Closing combined project channel")
+		close(gitlabProjectChannel)
+	}()
+
+	cloneWaitGroup := sync.WaitGroup{}
+	for {
+		receivedRepo, ok := <-gitCloneChannel
+		if !ok {
+			Log.Debugf("%s \n", color.FgRed("Clone channel close, wait for last clone to finish, then breaking"))
+			cloneWaitGroup.Wait()
+			break
+		}
+
+		cloneWaitGroup.Add(1)
+		go func() {
+			err := receivedRepo.CloneProject()
+			if err != nil {
+				Log.Printf("Failed to clone project %s: %v", receivedRepo.Name, err)
+			}
+			cloneWaitGroup.Done()
+		}()
+	}
+
 	// NEXT: Get this into a proper pipe pattern, closing channels when wait groups finish.
 	// THEN add tests.
-	fetchWaitGroup.Wait()
-	cloneWaitGroup.Wait()
-	l.Log.Infof(color.FgGreen("Done in %.2f seconds!"), time.Since(startTime).Seconds())
+	Log.Infof(color.FgGreen("Done in %.2f seconds!"), time.Since(startTime).Seconds())
+}
+
+func pipeProjectsToRepos(gitlabProjectChannel chan gitlab.ProjectMetadata, gitRepoChannel chan gitrepo.Repository) func() {
+	return func() {
+		for {
+			receivedProject, ok := <-gitlabProjectChannel
+			if !ok {
+				break
+			}
+			gitRepo := gitrepo.Repository{
+				Name:              receivedProject.Name,
+				SSHURLToRepo:      receivedProject.SSHURLToRepo,
+				PathWithNamespace: receivedProject.PathWithNamespace,
+				Archived:          receivedProject.Archived,
+				CloneOptions:      receivedProject,
+			}
+			gitRepoChannel <- gitRepo
+		}
+		close(gitRepoChannel)
+	}
 }
 
 func loadConfig(configFileName string) (*Config, error) {
