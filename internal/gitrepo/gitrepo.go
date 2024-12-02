@@ -24,6 +24,7 @@ type CloneOptions interface {
 	CloneRootDirectory() string
 }
 
+// NEXT: Separate into checking for state/existence, and cloning. Conditionally add to rate-limited clone channel if needs cloning.
 func (project *Repository) CloneProject() error {
 	projectPath := project.getProjectPath(project.CloneOptions.CloneRootDirectory())
 

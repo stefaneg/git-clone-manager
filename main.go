@@ -12,6 +12,7 @@ import (
 	"tools/internal/gitlab"
 	"tools/internal/gitrepo"
 	. "tools/internal/log"
+	"tools/internal/pipe"
 	typex "tools/type"
 
 	"gopkg.in/yaml.v2"
@@ -43,10 +44,12 @@ func main() {
 	}
 
 	gitlabProjectChannel := make(chan gitlab.ProjectMetadata, 20)
-	gitCloneChannel := make(chan gitrepo.Repository, 20)
 
-	// Receive channelled projects, instantiate git repository for each project
-	go pipeProjectsToRepos(gitlabProjectChannel, gitCloneChannel)()
+	gitRepoChannel := make(chan gitrepo.Repository, 20)
+	go pipeProjectsToRepos(gitlabProjectChannel, gitRepoChannel)()
+
+	gitCloneChannel := make(chan gitrepo.Repository, 20)
+	go pipe.RateLimit(gitRepoChannel, gitCloneChannel, 10)
 
 	var projectChannels []<-chan gitlab.ProjectMetadata
 
