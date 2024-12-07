@@ -4,11 +4,11 @@ gitlab:
     cloneDirectory: 'cloned_projects'
 #    cloneDirectory: '/Users/gudlaugur.egilsson/src/controlant' # Use full path only. Shell expansion not supported (f.ex. ~)
     groups:
-      - id: "ops"
+      - name: "ops"
         cloneArchived: true
-      - id: "catapult"
+      - name: "catapult"
         cloneArchived: false
-      - id: "DevOps"
+      - name: "DevOps"
         cloneArchived: false
     projects:
       - name: "Notes"
@@ -24,4 +24,4 @@ gitlab:
       - name: "readme-template"
         fullPath: "templates/readme-template"
       - name: "Fleet manager api"
-        fullPath: "dfl/fleet-manager/fleet-manager-api.git"
+        fullPath: "dfl/fleet-manager/fleet-manager-api"

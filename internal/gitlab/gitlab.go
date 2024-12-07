@@ -17,7 +17,7 @@ type GitLabConfig struct {
 }
 
 type GitLabGroupConfig struct {
-	ID            string `yaml:"id"`
+	Name          string `yaml:"name"`
 	CloneArchived bool   `yaml:"cloneArchived"`
 }
 
@@ -38,7 +38,7 @@ type ProjectMetadata struct {
 
 func (p ProjectMetadata) CloneArchived() bool {
 	cloneArchived := p.GroupConfig.CloneArchived
-	Log.Tracef("Clone archived %s=%t", p.GroupConfig.ID, cloneArchived)
+	Log.Tracef("Clone archived %s=%t", p.GroupConfig.Name, cloneArchived)
 	return cloneArchived
 }
 
@@ -91,9 +91,9 @@ func (gitlab GitLabConfig) ChannelGroups(token string, rootGroupConfig GitLabGro
 	gwg := sync.WaitGroup{}
 	groupChannel := make(chan GitlabApiGroup, 20)
 
-	rootGroup, err := gitlab.fetchGroupInfo(token, rootGroupConfig.ID)
+	rootGroup, err := gitlab.fetchGroupInfo(token, rootGroupConfig.Name)
 	if err != nil {
-		Log.Errorf("failed to fetch rootGroupConfig info for rootGroupConfig %s: %w", rootGroupConfig.ID, err)
+		Log.Errorf("failed to fetch rootGroupConfig info for rootGroupConfig %s: %w", rootGroupConfig.Name, err)
 	}
 
 	gwg.Add(1)
@@ -145,7 +145,7 @@ func (gitlab GitLabConfig) ChannelProjects(token string, rootGroupConfig GitLabG
 	pwg.Wait()
 	close(gitlabProjectChannel)
 
-	Log.Debugf("All projects fetched for group ... %s", color.FgGreen(rootGroupConfig.ID))
+	Log.Debugf("All projects fetched for group ... %s", color.FgGreen(rootGroupConfig.Name))
 }
 
 func (gitlab GitLabConfig) fetchProjects(token string, group GitlabApiGroup) ([]ProjectMetadata, error) {

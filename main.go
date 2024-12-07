@@ -30,6 +30,7 @@ func main() {
 	//trace.Start(f)
 	//defer trace.Stop()
 
+	// Process parameters
 	var verbose = typex.NullableBool{}
 	startTime := time.Now()
 
@@ -44,13 +45,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	gitlabProjectChannel := make(chan gitlab.ProjectMetadata, 20)
+	// Set up channel/pipes
+	// gitlab projects -> convert to repos -> check existence/archival state -> clone
 
+	gitlabProjectChannel := make(chan gitlab.ProjectMetadata, 20)
 	checkCloneChannel := make(chan gitrepo.Repository, 20)
 
-	go pipeProjectsToRepos(gitlabProjectChannel, checkCloneChannel)()
-
-	gitCloneChannel := make(chan gitrepo.Repository, 20)
+	go convertProjectsToRepos(gitlabProjectChannel, checkCloneChannel)()
 
 	var projectChannels []<-chan gitlab.ProjectMetadata
 
@@ -69,11 +70,9 @@ func main() {
 
 		// Iterate through configured groups and fetch gitlab groups
 		for _, group := range gitLabConfig.Groups {
-			// Get subgroups and projects
 			gitlabProjectChannel := make(chan gitlab.ProjectMetadata, 100)
 			projectChannels = append(projectChannels, gitlabProjectChannel)
 			go gitLabConfig.ChannelProjects(token, group, gitlabProjectChannel)
-
 		}
 
 		// Iterate through directly referred projects
@@ -82,20 +81,31 @@ func main() {
 			checkCloneChannel <- *repo
 		}
 	}
-	combinedProjectChannel := lo.FanIn(10, projectChannels...)
+	forwardChannels(projectChannels, gitlabProjectChannel, 10)
+	projectCounter, gitCloneChannel := filterCloneNeeded(checkCloneChannel)
+	gitlabCloneRatePerSecond := 7
+	var cloneChannelRateLimited <-chan gitrepo.Repository = pipe.RateLimit[gitrepo.Repository](gitCloneChannel, gitlabCloneRatePerSecond, 10)
+	cloneCount := cloneGitRepos(cloneChannelRateLimited)
+
+	Log.Infof(color.FgGreen("%d repos, %d cloned. %.2f seconds"), projectCounter.Count(), cloneCount, time.Since(startTime).Seconds())
+}
+
+func forwardChannels[T any](projectChannels []<-chan T, gitlabProjectChannel chan T, channelBufferCap int) {
+	combinedProjectChannel := lo.FanIn(channelBufferCap, projectChannels...)
 	go func() {
 		for {
 			project, ok := <-combinedProjectChannel
 			if !ok {
-				Log.Tracef("%s \n", color.FgRed("All projects processed, breaking!!!!"))
 				break
 			}
 			gitlabProjectChannel <- project
 		}
-		Log.Tracef("Closing combined project channel")
 		close(gitlabProjectChannel)
 	}()
+}
 
+func filterCloneNeeded(checkCloneChannel chan gitrepo.Repository) (*counter.Counter, chan gitrepo.Repository) {
+	gitCloneChannel := make(chan gitrepo.Repository, 20)
 	projectCounter := counter.NewCounter()
 	checkWaitGroup := sync.WaitGroup{}
 	go func() {
@@ -121,16 +131,15 @@ func main() {
 		checkWaitGroup.Wait()
 		close(gitCloneChannel)
 	}()
+	return projectCounter, gitCloneChannel
+}
 
-	rateLimitedClone := pipe.RateLimit[gitrepo.Repository](gitCloneChannel, 8, 10)
-
+func cloneGitRepos(rateLimitedClone <-chan gitrepo.Repository) int {
 	cloneWaitGroup := sync.WaitGroup{}
 	cloneCount := 0
 	for {
 		receivedRepo, ok := <-rateLimitedClone
 		if !ok {
-			Log.Tracef("%s \n", "Clone channel close, wait for last clone to finish, then breaking")
-			cloneWaitGroup.Wait()
 			break
 		}
 		cloneCount++
@@ -143,11 +152,11 @@ func main() {
 			}
 		}()
 	}
-
-	Log.Infof(color.FgGreen("%d repos, %d cloned. %.2f seconds"), projectCounter.Count(), cloneCount, time.Since(startTime).Seconds())
+	cloneWaitGroup.Wait()
+	return cloneCount
 }
 
-func pipeProjectsToRepos(gitlabProjectChannel chan gitlab.ProjectMetadata, gitRepoChannel chan gitrepo.Repository) func() {
+func convertProjectsToRepos(gitlabProjectChannel chan gitlab.ProjectMetadata, gitRepoChannel chan gitrepo.Repository) func() {
 	return func() {
 		for {
 			receivedProject, ok := <-gitlabProjectChannel
