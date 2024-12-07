@@ -14,6 +14,7 @@ type GitLabConfig struct {
 	CloneDirectory       string                             `yaml:"cloneDirectory"` // Where to clone projects in local directory structure
 	Groups               []GitLabGroupConfig                `yaml:"groups"`
 	Projects             []gitremote.GitRemoteProjectConfig `yaml:"projects"`
+	RateLimitPerSecond   int                                `yaml:"rateLimitPerSecond"` // 0 is interpreted as no limit
 }
 
 type GitLabGroupConfig struct {

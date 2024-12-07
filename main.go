@@ -10,6 +10,7 @@ import (
 	"time"
 	"tools/internal/color"
 	"tools/internal/counter"
+	"tools/internal/ext"
 	"tools/internal/gitlab"
 	"tools/internal/gitrepo"
 	. "tools/internal/log"
@@ -22,6 +23,8 @@ import (
 type Config struct {
 	GitLab []gitlab.GitLabConfig `yaml:"gitlab"`
 }
+
+const DefaultGitlabRateLimit = 9
 
 func main() {
 
@@ -48,14 +51,18 @@ func main() {
 	// Set up channel/pipes
 	// gitlab projects -> convert to repos -> check existence/archival state -> clone
 
-	gitlabProjectChannel := make(chan gitlab.ProjectMetadata, 20)
-	checkCloneChannel := make(chan gitrepo.Repository, 20)
-
-	go convertProjectsToRepos(gitlabProjectChannel, checkCloneChannel)()
-
-	var projectChannels []<-chan gitlab.ProjectMetadata
-
+	var cloneChannelsRateLimited []<-chan gitrepo.Repository
 	for _, gitLabConfig := range config.GitLab {
+
+		gitlabProjectChannel := make(chan gitlab.ProjectMetadata, 20)
+		checkCloneChannel := make(chan gitrepo.Repository, 20)
+
+		go convertProjectsToRepos(gitlabProjectChannel, checkCloneChannel)()
+
+		var gitlabCloneRatePerSecond = ext.DefaultValue(gitLabConfig.RateLimitPerSecond, DefaultGitlabRateLimit)
+
+		var projectChannels []<-chan gitlab.ProjectMetadata
+
 		Log.Infof("Cloning groups/projects in %s into %s", color.FgCyan(gitLabConfig.HostName), color.FgCyan(gitLabConfig.CloneDirectory))
 		err = os.MkdirAll(gitLabConfig.GetCloneDirectory(), os.ModePerm)
 		if err != nil {
@@ -73,7 +80,13 @@ func main() {
 			gitlabProjectChannel := make(chan gitlab.ProjectMetadata, 100)
 			projectChannels = append(projectChannels, gitlabProjectChannel)
 			go gitLabConfig.ChannelProjects(token, group, gitlabProjectChannel)
+
 		}
+		forwardChannels(projectChannels, gitlabProjectChannel, 10)
+
+		_, gitCloneChannel := filterCloneNeeded(checkCloneChannel)
+		var cloneChannelRateLimited = pipe.RateLimit[gitrepo.Repository](gitCloneChannel, gitlabCloneRatePerSecond, 10)
+		cloneChannelsRateLimited = append(cloneChannelsRateLimited, cloneChannelRateLimited)
 
 		// Iterate through directly referred projects
 		for _, prj := range gitLabConfig.Projects {
@@ -81,26 +94,23 @@ func main() {
 			checkCloneChannel <- *repo
 		}
 	}
-	forwardChannels(projectChannels, gitlabProjectChannel, 10)
-	projectCounter, gitCloneChannel := filterCloneNeeded(checkCloneChannel)
-	gitlabCloneRatePerSecond := 7
-	var cloneChannelRateLimited <-chan gitrepo.Repository = pipe.RateLimit[gitrepo.Repository](gitCloneChannel, gitlabCloneRatePerSecond, 10)
-	cloneCount := cloneGitRepos(cloneChannelRateLimited)
 
-	Log.Infof(color.FgGreen("%d repos, %d cloned. %.2f seconds"), projectCounter.Count(), cloneCount, time.Since(startTime).Seconds())
+	cloneCount := cloneGitRepos(lo.FanIn(10, cloneChannelsRateLimited...))
+
+	Log.Infof(color.FgGreen("%d repos, %d cloned. %.2f seconds"), 999, cloneCount, time.Since(startTime).Seconds())
 }
 
-func forwardChannels[T any](projectChannels []<-chan T, gitlabProjectChannel chan T, channelBufferCap int) {
-	combinedProjectChannel := lo.FanIn(channelBufferCap, projectChannels...)
+func forwardChannels[T any](inboundChannels []<-chan T, outputChannel chan T, channelBufferCap int) {
+	combinedChannel := lo.FanIn(channelBufferCap, inboundChannels...)
 	go func() {
 		for {
-			project, ok := <-combinedProjectChannel
+			project, ok := <-combinedChannel
 			if !ok {
 				break
 			}
-			gitlabProjectChannel <- project
+			outputChannel <- project
 		}
-		close(gitlabProjectChannel)
+		close(outputChannel)
 	}()
 }
 

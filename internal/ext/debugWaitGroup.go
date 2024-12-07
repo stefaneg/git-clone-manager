@@ -1,4 +1,7 @@
-package extensions
+/*
+Package ext is "language extensions", functionality that in a perfect world would be part of the golang standard library
+*/
+package ext
 
 import (
 	"fmt"
