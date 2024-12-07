@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 	"tools/internal/color"
+	"tools/internal/counter"
 	"tools/internal/gitlab"
 	"tools/internal/gitrepo"
 	. "tools/internal/log"
@@ -45,11 +46,11 @@ func main() {
 
 	gitlabProjectChannel := make(chan gitlab.ProjectMetadata, 20)
 
-	gitRepoChannel := make(chan gitrepo.Repository, 20)
-	go pipeProjectsToRepos(gitlabProjectChannel, gitRepoChannel)()
+	checkCloneChannel := make(chan gitrepo.Repository, 20)
+
+	go pipeProjectsToRepos(gitlabProjectChannel, checkCloneChannel)()
 
 	gitCloneChannel := make(chan gitrepo.Repository, 20)
-	go pipe.RateLimit(gitRepoChannel, gitCloneChannel, 10)
 
 	var projectChannels []<-chan gitlab.ProjectMetadata
 
@@ -78,7 +79,7 @@ func main() {
 		// Iterate through directly referred projects
 		for _, prj := range gitLabConfig.Projects {
 			repo := gitrepo.CreateFromGitRemoteConfig(prj, gitLabConfig.HostName, gitLabConfig.CloneDirectory)
-			gitCloneChannel <- *repo
+			checkCloneChannel <- *repo
 		}
 	}
 	combinedProjectChannel := lo.FanIn(10, projectChannels...)
@@ -95,10 +96,38 @@ func main() {
 		close(gitlabProjectChannel)
 	}()
 
+	projectCounter := counter.NewCounter()
+	checkWaitGroup := sync.WaitGroup{}
+	go func() {
+		for {
+			receivedRepo, ok := <-checkCloneChannel
+			if !ok {
+				Log.Tracef("%s \n", "Clone channel close, wait for last clone to finish, then breaking")
+				break
+			}
+			projectCounter.Add(1)
+			needsCloning, _ := receivedRepo.CheckNeedsCloning()
+			if needsCloning {
+				checkWaitGroup.Add(1)
+				go func() {
+					defer checkWaitGroup.Done()
+					Log.Debugf("Adding %s to clone queue ", receivedRepo.Name)
+					gitCloneChannel <- receivedRepo
+				}()
+			} else {
+				Log.Tracef("%s \n", "Clone not needed")
+			}
+		}
+		checkWaitGroup.Wait()
+		close(gitCloneChannel)
+	}()
+
+	rateLimitedClone := pipe.RateLimit[gitrepo.Repository](gitCloneChannel, 8, 10)
+
 	cloneWaitGroup := sync.WaitGroup{}
 	cloneCount := 0
 	for {
-		receivedRepo, ok := <-gitCloneChannel
+		receivedRepo, ok := <-rateLimitedClone
 		if !ok {
 			Log.Tracef("%s \n", "Clone channel close, wait for last clone to finish, then breaking")
 			cloneWaitGroup.Wait()
@@ -108,8 +137,6 @@ func main() {
 		cloneWaitGroup.Add(1)
 		go func() {
 			defer cloneWaitGroup.Done()
-			// NEXT: Deal with rate limit on git clone operations somehow.
-			// Add tests....
 			err := receivedRepo.CloneProject()
 			if err != nil {
 				Log.Errorf("Failed to clone project %s: %v", color.FgRed(receivedRepo.Name), err)
@@ -117,7 +144,7 @@ func main() {
 		}()
 	}
 
-	Log.Infof(color.FgGreen("%d repos, took %.2f seconds"), cloneCount, time.Since(startTime).Seconds())
+	Log.Infof(color.FgGreen("%d repos, %d cloned. %.2f seconds"), projectCounter.Count(), cloneCount, time.Since(startTime).Seconds())
 }
 
 func pipeProjectsToRepos(gitlabProjectChannel chan gitlab.ProjectMetadata, gitRepoChannel chan gitrepo.Repository) func() {

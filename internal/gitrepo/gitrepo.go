@@ -24,24 +24,13 @@ type CloneOptions interface {
 	CloneRootDirectory() string
 }
 
-// NEXT: Separate into checking for state/existence, and cloning. Conditionally add to rate-limited clone channel if needs cloning.
 func (project *Repository) CloneProject() error {
+	needsCloning, checkErr := project.CheckNeedsCloning()
+	if !needsCloning {
+		return checkErr
+	}
+
 	projectPath := project.getProjectPath(project.CloneOptions.CloneRootDirectory())
-
-	// Check if the project directory already exists
-	if _, err := os.Stat(path.Join(projectPath, ".git")); !os.IsNotExist(err) {
-		if Log.GetLevel() >= logrus.DebugLevel {
-			Log.Debugf("Git repository %s already exists at %s, skipping clone\n", color.FgMagenta(project.Name), color.FgMagenta(projectPath))
-		}
-		return nil // Skip cloning if directory already exists
-	}
-	if !project.cloneArchived() && project.Archived {
-		if Log.GetLevel() >= logrus.DebugLevel {
-			Log.Debugf("Skipping archived project %s %s", color.FgMagenta(project.Name), color.FgMagenta(projectPath))
-		}
-		return nil
-	}
-
 	Log.Infof("Cloning %s to %s", color.FgMagenta(project.Name), color.FgMagenta(projectPath))
 	err := os.MkdirAll(projectPath, os.ModePerm)
 	if err != nil {
@@ -62,6 +51,24 @@ func (project *Repository) CloneProject() error {
 	}
 
 	return nil
+}
+
+func (project *Repository) CheckNeedsCloning() (bool, error) {
+	projectPath := project.getProjectPath(project.CloneOptions.CloneRootDirectory())
+
+	if _, err := os.Stat(path.Join(projectPath, ".git")); !os.IsNotExist(err) {
+		if Log.GetLevel() >= logrus.DebugLevel {
+			Log.Debugf("Git repository %s already exists at %s, skipping clone\n", color.FgMagenta(project.Name), color.FgMagenta(projectPath))
+		}
+		return false, nil // Skip cloning if directory already exists
+	}
+	if !project.cloneArchived() && project.Archived {
+		if Log.GetLevel() >= logrus.DebugLevel {
+			Log.Debugf("Skipping archived project %s %s", color.FgMagenta(project.Name), color.FgMagenta(projectPath))
+		}
+		return false, nil
+	}
+	return true, nil
 }
 
 func (project *Repository) getProjectPath(cloneDirectory string) string {
