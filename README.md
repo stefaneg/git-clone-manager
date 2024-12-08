@@ -59,6 +59,7 @@ go build -o wcmanager
 # To do
 - Collect error counts, archived counts. 
 - Separate into goroutine-free access / repository classes and pipeline classes to collect results.
+- Delete branches without remote.
 - Create command that reports projects that are not on main branch
 - Create command that reports projects with dirty index
 - Create command that reports projects with unpushed changes.

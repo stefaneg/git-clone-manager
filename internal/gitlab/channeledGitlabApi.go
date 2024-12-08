@@ -2,8 +2,10 @@ package gitlab
 
 import (
 	"fmt"
+	"github.com/samber/lo"
 	"sync"
 	"tools/internal/color"
+	"tools/internal/gitrepo"
 	. "tools/internal/log"
 )
 
@@ -117,4 +119,35 @@ func (channeledApi *ChanneledApi) FetchAndChannelGroupProjects(rootGroupConfig *
 
 	Log.Debugf("All projects fetched for group ... %s", color.FgGreen(rootGroupConfig.Name))
 	return gitlabProjectChannel
+}
+
+func (channeledApi *ChanneledApi) ScheduleGitlabGroupProjectsFetch(groups []GitLabGroupConfig) <-chan ProjectMetadata {
+	var projectChannels []<-chan ProjectMetadata
+	for _, group := range groups {
+		projectChannels = append(projectChannels, channeledApi.FetchAndChannelGroupProjects(&group))
+	}
+	return lo.FanIn(ProjectChannelBufferSize, projectChannels...)
+}
+
+func ConvertProjectsToRepos(gitlabProjectChannel <-chan ProjectMetadata) chan *gitrepo.Repository {
+	gitRepoChannel := make(chan *gitrepo.Repository, 10)
+
+	go func() {
+		for {
+			receivedProject, ok := <-gitlabProjectChannel
+			if !ok {
+				break
+			}
+			gitRepo := gitrepo.Repository{
+				Name:              receivedProject.Name,
+				SSHURLToRepo:      receivedProject.SSHURLToRepo,
+				PathWithNamespace: receivedProject.PathWithNamespace,
+				Archived:          receivedProject.Archived,
+				CloneOptions:      receivedProject,
+			}
+			gitRepoChannel <- &gitRepo
+		}
+		close(gitRepoChannel)
+	}()
+	return gitRepoChannel
 }

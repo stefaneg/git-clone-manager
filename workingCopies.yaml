@@ -3,7 +3,7 @@ gitlab:
     hostName: 'gitlab.controlant.com'
     cloneDirectory: 'cloned_projects'
 #    cloneDirectory: '/Users/gudlaugur.egilsson/src/controlant' # Use full path only. Shell expansion not supported (f.ex. ~)
-    rateLimitPerSecond: 0 # Default gitlab rate limit is 10 per second (600 per minute)
+    rateLimitPerSecond: 7 # Default gitlab rate limit is 10 per second (600 per minute)
     groups:
       - name: "ops"
         cloneArchived: true

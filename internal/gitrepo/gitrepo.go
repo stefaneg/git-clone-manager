@@ -24,27 +24,27 @@ type CloneOptions interface {
 	CloneRootDirectory() string
 }
 
-func (project *Repository) CloneProject() error {
-	needsCloning, checkErr := project.CheckNeedsCloning()
+func (repo *Repository) Clone() error {
+	needsCloning, checkErr := repo.CheckNeedsCloning()
 	if !needsCloning {
 		return checkErr
 	}
 
-	projectPath := project.getProjectPath(project.CloneOptions.CloneRootDirectory())
-	Log.Infof("Cloning %s to %s", color.FgMagenta(project.Name), color.FgMagenta(projectPath))
+	projectPath := repo.getWorkingCopyPath(repo.CloneOptions.CloneRootDirectory())
+	Log.Infof("Cloning %s to %s", color.FgMagenta(repo.Name), color.FgMagenta(projectPath))
 	err := os.MkdirAll(projectPath, os.ModePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create directory %s: %v", color.FgRed(projectPath), err)
 	}
-	cloneCmd := fmt.Sprintf("git clone %s .", project.SSHURLToRepo)
+	cloneCmd := fmt.Sprintf("git clone %s .", repo.SSHURLToRepo)
 	_, err = sh.ExecuteShellCommand(sh.DirectoryPath(projectPath), sh.ShellCommand(cloneCmd))
 
 	if err != nil {
 		return fmt.Errorf("in %s, %s failed: %s", color.FgRed(projectPath), cloneCmd, err)
 	}
 
-	if project.Archived {
-		err := project.WriteArchivedMarker(projectPath)
+	if repo.Archived {
+		err := repo.WriteArchivedMarker(projectPath)
 		if err != nil {
 			return err
 		}
@@ -53,31 +53,31 @@ func (project *Repository) CloneProject() error {
 	return nil
 }
 
-func (project *Repository) CheckNeedsCloning() (bool, error) {
-	projectPath := project.getProjectPath(project.CloneOptions.CloneRootDirectory())
+func (repo *Repository) CheckNeedsCloning() (bool, error) {
+	projectPath := repo.getWorkingCopyPath(repo.CloneOptions.CloneRootDirectory())
 
 	if _, err := os.Stat(path.Join(projectPath, ".git")); !os.IsNotExist(err) {
 		if Log.GetLevel() >= logrus.DebugLevel {
-			Log.Debugf("Git repository %s already exists at %s, skipping clone\n", color.FgMagenta(project.Name), color.FgMagenta(projectPath))
+			Log.Debugf("Git repository %s already exists at %s, skipping clone\n", color.FgMagenta(repo.Name), color.FgMagenta(projectPath))
 		}
 		return false, nil // Skip cloning if directory already exists
 	}
-	if !project.cloneArchived() && project.Archived {
+	if !repo.cloneArchived() && repo.Archived {
 		if Log.GetLevel() >= logrus.DebugLevel {
-			Log.Debugf("Skipping archived project %s %s", color.FgMagenta(project.Name), color.FgMagenta(projectPath))
+			Log.Debugf("Skipping archived repo %s %s", color.FgMagenta(repo.Name), color.FgMagenta(projectPath))
 		}
 		return false, nil
 	}
 	return true, nil
 }
 
-func (project *Repository) getProjectPath(cloneDirectory string) string {
-	projectPath := path.Join(cloneDirectory, project.PathWithNamespace)
+func (repo *Repository) getWorkingCopyPath(cloneDirectory string) string {
+	projectPath := path.Join(cloneDirectory, repo.PathWithNamespace)
 	return projectPath
 }
 
 // WriteArchivedMarker creates an "ARCHIVED.txt" file in the root directory of the archived project
-func (project *Repository) WriteArchivedMarker(projectPath string) error {
+func (repo *Repository) WriteArchivedMarker(projectPath string) error {
 	// Define the path for the ARCHIVED.txt marker file
 	markerFilePath := path.Join(projectPath, "ARCHIVED.txt")
 
@@ -94,8 +94,8 @@ func (project *Repository) WriteArchivedMarker(projectPath string) error {
 		}
 	}(file)
 
-	// Write a message indicating the project is archived
-	_, err = file.WriteString("This project is archived and not active.\n")
+	// Write a message indicating the repo is archived
+	_, err = file.WriteString("This repo is archived and not active.\n")
 	if err != nil {
 		return fmt.Errorf("failed to write to marker file: %w", err)
 	}
@@ -105,8 +105,8 @@ func (project *Repository) WriteArchivedMarker(projectPath string) error {
 	return nil
 }
 
-func (project *Repository) cloneArchived() bool {
-	return project.CloneOptions.CloneArchived()
+func (repo *Repository) cloneArchived() bool {
+	return repo.CloneOptions.CloneArchived()
 }
 
 type RemoteCloneOptions struct {
