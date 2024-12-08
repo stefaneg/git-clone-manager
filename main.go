@@ -54,32 +54,36 @@ func main() {
 	var cloneChannelsRateLimited []<-chan gitrepo.Repository
 	for _, gitLabConfig := range config.GitLab {
 
+		token := gitLabConfig.RetrieveTokenFromEnv()
+		if token == "" {
+			Log.Printf("Gitlab token env variable %s not set for %s; skipping", color.FgRed(gitLabConfig.EnvTokenVariableName), color.FgCyan(gitLabConfig.HostName))
+			continue
+		}
+		labApi := gitlab.NewRepositoryAPI(token, gitLabConfig.HostName)
+
+		Log.Infof("Cloning %s groups & %s projects from %s into %s", color.FgMagenta(fmt.Sprintf("%d", len(gitLabConfig.Groups))), color.FgMagenta(fmt.Sprintf("%d", len(gitLabConfig.Projects))), color.FgCyan(gitLabConfig.HostName), color.FgCyan(gitLabConfig.CloneDirectory))
+
+		// Working copy manager responsibility
+		err = os.MkdirAll(gitLabConfig.CloneDirectory, os.ModePerm)
+		if err != nil {
+			Log.Fatalf("Failed to create clone directory: %v", err)
+		}
+
+		//
+		var gitlabCloneRatePerSecond = ext.DefaultValue(gitLabConfig.RateLimitPerSecond, DefaultGitlabRateLimit)
+
 		gitlabProjectChannel := make(chan gitlab.ProjectMetadata, 20)
 		checkCloneChannel := make(chan gitrepo.Repository, 20)
 
 		go convertProjectsToRepos(gitlabProjectChannel, checkCloneChannel)()
 
-		var gitlabCloneRatePerSecond = ext.DefaultValue(gitLabConfig.RateLimitPerSecond, DefaultGitlabRateLimit)
-
 		var projectChannels []<-chan gitlab.ProjectMetadata
-
-		Log.Infof("Cloning groups/projects in %s into %s", color.FgCyan(gitLabConfig.HostName), color.FgCyan(gitLabConfig.CloneDirectory))
-		err = os.MkdirAll(gitLabConfig.GetCloneDirectory(), os.ModePerm)
-		if err != nil {
-			Log.Fatalf("Failed to create clone directory: %v", err)
-		}
-
-		token := os.Getenv(gitLabConfig.EnvTokenVariableName)
-		if token == "" {
-			Log.Printf("Environment variable %s not set; skipping", gitLabConfig.EnvTokenVariableName)
-			continue
-		}
 
 		// Iterate through configured groups and fetch gitlab groups
 		for _, group := range gitLabConfig.Groups {
 			gitlabProjectChannel := make(chan gitlab.ProjectMetadata, 100)
 			projectChannels = append(projectChannels, gitlabProjectChannel)
-			go gitLabConfig.ChannelProjects(token, group, gitlabProjectChannel)
+			go gitlab.ChannelProjects(labApi, group, gitlabProjectChannel, gitLabConfig)
 
 		}
 		forwardChannels(projectChannels, gitlabProjectChannel, 10)

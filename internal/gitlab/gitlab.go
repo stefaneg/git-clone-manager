@@ -2,6 +2,7 @@ package gitlab
 
 import (
 	"fmt"
+	"os"
 	"sync"
 	"tools/internal/color"
 	"tools/internal/gitremote"
@@ -39,7 +40,6 @@ type ProjectMetadata struct {
 
 func (p ProjectMetadata) CloneArchived() bool {
 	cloneArchived := p.GroupConfig.CloneArchived
-	Log.Tracef("Clone archived %s=%t", p.GroupConfig.Name, cloneArchived)
 	return cloneArchived
 }
 
@@ -47,33 +47,30 @@ func (p ProjectMetadata) CloneRootDirectory() string {
 	return p.GitLabConfig.CloneDirectory
 }
 
-func (gitlab GitLabConfig) GetCloneDirectory() string {
-	return gitlab.CloneDirectory
+func (gitLabConfig GitLabConfig) RetrieveTokenFromEnv() string {
+	token := os.Getenv(gitLabConfig.EnvTokenVariableName)
+	return token
 }
 
-func (gitlab GitLabConfig) getBaseUrl() string {
-	return fmt.Sprintf("https://%s/api/v4", gitlab.HostName)
-}
-
-func (gitlab GitLabConfig) fetchProjectsForGroup(token string, group GitlabApiGroup, rootGroupConfig GitLabGroupConfig, projectChannel chan ProjectMetadata) {
+func fetchProjectsForGroup(gitlab *RepositoryAPI, group GitlabApiGroup, rootGroupConfig GitLabGroupConfig, projectChannel chan ProjectMetadata, gitlabConfig GitLabConfig) {
 
 	var allProjects []ProjectMetadata
 
-	projects, err := gitlab.fetchProjects(token, group)
+	projects, err := gitlab.fetchProjects(group)
 	if err != nil {
 		Log.Printf("Failed to fetch projects for group %s: %v", group.Name, err)
 	}
 	allProjects = append(allProjects, projects...)
 	for _, project := range projects {
 		project.Group = group
-		project.GitLabConfig = gitlab
+		project.GitLabConfig = gitlabConfig
 		project.GroupConfig = rootGroupConfig
 		projectChannel <- project
 	}
 }
 
-func channelSubgroups(gitlab GitLabConfig, token string, groupId string, gwg *sync.WaitGroup, groupChannel chan GitlabApiGroup) {
-	subgroups, err := gitlab.fetchSubgroups(token, groupId)
+func channelSubgroups(gitlab *RepositoryAPI, groupId string, gwg *sync.WaitGroup, groupChannel chan GitlabApiGroup) {
+	subgroups, err := gitlab.fetchSubgroups(groupId)
 	if err != nil {
 		Log.Errorf(fmt.Sprintf("failed to fetch subgroups for group %s: %w", groupId, err))
 	}
@@ -87,12 +84,12 @@ func channelSubgroups(gitlab GitLabConfig, token string, groupId string, gwg *sy
 	gwg.Done()
 }
 
-func (gitlab GitLabConfig) ChannelGroups(token string, rootGroupConfig GitLabGroupConfig, subGroupsChannel chan<- GitlabApiGroup) {
+func ChannelGroups(gitlab *RepositoryAPI, rootGroupConfig GitLabGroupConfig, subGroupsChannel chan<- GitlabApiGroup) {
 
 	gwg := sync.WaitGroup{}
 	groupChannel := make(chan GitlabApiGroup, 20)
 
-	rootGroup, err := gitlab.fetchGroupInfo(token, rootGroupConfig.Name)
+	rootGroup, err := gitlab.fetchGroupInfo(rootGroupConfig.Name)
 	if err != nil {
 		Log.Errorf("failed to fetch rootGroupConfig info for rootGroupConfig %s: %w", rootGroupConfig.Name, err)
 	}
@@ -101,7 +98,7 @@ func (gitlab GitLabConfig) ChannelGroups(token string, rootGroupConfig GitLabGro
 	go func() {
 		// Start by adding root group to the work list
 		groupId := rootGroup.ID
-		channelSubgroups(gitlab, token, fmt.Sprintf("%d", groupId), &gwg, groupChannel)
+		channelSubgroups(gitlab, fmt.Sprintf("%d", groupId), &gwg, groupChannel)
 	}()
 
 	go func() {
@@ -112,7 +109,7 @@ func (gitlab GitLabConfig) ChannelGroups(token string, rootGroupConfig GitLabGro
 			}
 			subGroupsChannel <- receivedGroup
 			groupId := receivedGroup.ID
-			channelSubgroups(gitlab, token, fmt.Sprintf("%d", groupId), &gwg, groupChannel)
+			channelSubgroups(gitlab, fmt.Sprintf("%d", groupId), &gwg, groupChannel)
 		}
 		close(subGroupsChannel)
 	}()
@@ -120,13 +117,13 @@ func (gitlab GitLabConfig) ChannelGroups(token string, rootGroupConfig GitLabGro
 	close(groupChannel)
 }
 
-func (gitlab GitLabConfig) ChannelProjects(token string, rootGroupConfig GitLabGroupConfig, gitlabProjectChannel chan ProjectMetadata) {
+func ChannelProjects(gitlab *RepositoryAPI, rootGroupConfig GitLabGroupConfig, gitlabProjectChannel chan ProjectMetadata, gitlabConfig GitLabConfig) {
 	pwg := sync.WaitGroup{}
 	groupChannel := make(chan GitlabApiGroup, 10)
 	pwg.Add(1)
 	go func() {
 		defer pwg.Done()
-		gitlab.ChannelGroups(token, rootGroupConfig, groupChannel)
+		ChannelGroups(gitlab, rootGroupConfig, groupChannel)
 	}()
 
 	go func() {
@@ -139,7 +136,7 @@ func (gitlab GitLabConfig) ChannelProjects(token string, rootGroupConfig GitLabG
 			pwg.Add(1)
 			go func() {
 				defer pwg.Done()
-				gitlab.fetchProjectsForGroup(token, receivedGroup, rootGroupConfig, gitlabProjectChannel)
+				fetchProjectsForGroup(gitlab, receivedGroup, rootGroupConfig, gitlabProjectChannel, gitlabConfig)
 			}()
 		}
 	}()
@@ -147,16 +144,4 @@ func (gitlab GitLabConfig) ChannelProjects(token string, rootGroupConfig GitLabG
 	close(gitlabProjectChannel)
 
 	Log.Debugf("All projects fetched for group ... %s", color.FgGreen(rootGroupConfig.Name))
-}
-
-func (gitlab GitLabConfig) fetchProjects(token string, group GitlabApiGroup) ([]ProjectMetadata, error) {
-	return gitlabGet[[]ProjectMetadata](token, fmt.Sprintf("%s/groups/%d/projects", gitlab.getBaseUrl(), group.ID))
-}
-
-func (gitlab GitLabConfig) fetchSubgroups(token, groupID string) ([]GitlabApiGroup, error) {
-	return gitlabGet[[]GitlabApiGroup](token, fmt.Sprintf("%s/groups/%s/subgroups", gitlab.getBaseUrl(), groupID))
-}
-
-func (gitlab GitLabConfig) fetchGroupInfo(token string, groupID string) (*GitlabApiGroup, error) {
-	return gitlabGet[*GitlabApiGroup](token, fmt.Sprintf("%s/groups/%s", gitlab.getBaseUrl(), groupID))
 }
