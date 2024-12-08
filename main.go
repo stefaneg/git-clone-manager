@@ -78,13 +78,12 @@ func main() {
 		// Start piping projects to the checkCloneChannel - which will again channel to clone.
 		go convertProjectsAndChannelToRepos(gitlabProjectChannel, checkCloneChannel)()
 
+		channeledApi := gitlab.NewChanneledApi(labApi, &gitLabConfig)
 		// Iterate through configured groups and pipe fetched projects to the gitlabProjectChannel
 		var projectChannels []<-chan gitlab.ProjectMetadata
+
 		for _, group := range gitLabConfig.Groups {
-			groupProjectChannel := make(chan gitlab.ProjectMetadata, 100)
-			projectChannels = append(projectChannels, groupProjectChannel)
-			channeledApi := gitlab.NewChanneledApi(labApi)
-			go channeledApi.FetchAndChannelGroupProjects(&group, groupProjectChannel, &gitLabConfig)
+			projectChannels = append(projectChannels, channeledApi.FetchAndChannelGroupProjects(&group))
 
 		}
 		forwardChannels(projectChannels, gitlabProjectChannel, 10)
