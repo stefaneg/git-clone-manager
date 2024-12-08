@@ -59,7 +59,7 @@ func main() {
 			Log.Printf("Gitlab token env variable %s not set for %s; skipping", color.FgRed(gitLabConfig.EnvTokenVariableName), color.FgCyan(gitLabConfig.HostName))
 			continue
 		}
-		labApi := gitlab.NewRepositoryAPI(token, gitLabConfig.HostName)
+		labApi := gitlab.NewGitlabAPI(token, gitLabConfig.HostName)
 
 		Log.Infof("Cloning %s groups & %s projects from %s into %s", color.FgMagenta(fmt.Sprintf("%d", len(gitLabConfig.Groups))), color.FgMagenta(fmt.Sprintf("%d", len(gitLabConfig.Projects))), color.FgCyan(gitLabConfig.HostName), color.FgCyan(gitLabConfig.CloneDirectory))
 
@@ -69,27 +69,28 @@ func main() {
 			Log.Fatalf("Failed to create clone directory: %v", err)
 		}
 
-		//
-		var gitlabCloneRatePerSecond = ext.DefaultValue(gitLabConfig.RateLimitPerSecond, DefaultGitlabRateLimit)
+		// Clone/pull rate is a general git concern - not gitlab specific
+		var cloneRatePerSecond = ext.DefaultValue(gitLabConfig.RateLimitPerSecond, DefaultGitlabRateLimit)
 
 		gitlabProjectChannel := make(chan gitlab.ProjectMetadata, 20)
 		checkCloneChannel := make(chan gitrepo.Repository, 20)
 
-		go convertProjectsToRepos(gitlabProjectChannel, checkCloneChannel)()
+		// Start piping projects to the checkCloneChannel - which will again channel to clone.
+		go convertProjectsAndChannelToRepos(gitlabProjectChannel, checkCloneChannel)()
 
+		// Iterate through configured groups and pipe fetched projects to the gitlabProjectChannel
 		var projectChannels []<-chan gitlab.ProjectMetadata
-
-		// Iterate through configured groups and fetch gitlab groups
 		for _, group := range gitLabConfig.Groups {
-			gitlabProjectChannel := make(chan gitlab.ProjectMetadata, 100)
-			projectChannels = append(projectChannels, gitlabProjectChannel)
-			go gitlab.ChannelProjects(labApi, group, gitlabProjectChannel, gitLabConfig)
+			groupProjectChannel := make(chan gitlab.ProjectMetadata, 100)
+			projectChannels = append(projectChannels, groupProjectChannel)
+			channeledApi := gitlab.NewChanneledApi(labApi)
+			go channeledApi.FetchAndChannelGroupProjects(&group, groupProjectChannel, &gitLabConfig)
 
 		}
 		forwardChannels(projectChannels, gitlabProjectChannel, 10)
 
 		_, gitCloneChannel := filterCloneNeeded(checkCloneChannel)
-		var cloneChannelRateLimited = pipe.RateLimit[gitrepo.Repository](gitCloneChannel, gitlabCloneRatePerSecond, 10)
+		var cloneChannelRateLimited = pipe.RateLimit[gitrepo.Repository](gitCloneChannel, cloneRatePerSecond, 10)
 		cloneChannelsRateLimited = append(cloneChannelsRateLimited, cloneChannelRateLimited)
 
 		// Iterate through directly referred projects
@@ -170,7 +171,7 @@ func cloneGitRepos(rateLimitedClone <-chan gitrepo.Repository) int {
 	return cloneCount
 }
 
-func convertProjectsToRepos(gitlabProjectChannel chan gitlab.ProjectMetadata, gitRepoChannel chan gitrepo.Repository) func() {
+func convertProjectsAndChannelToRepos(gitlabProjectChannel chan gitlab.ProjectMetadata, gitRepoChannel chan gitrepo.Repository) func() {
 	return func() {
 		for {
 			receivedProject, ok := <-gitlabProjectChannel
