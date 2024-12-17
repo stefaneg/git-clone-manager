@@ -34,15 +34,17 @@ func ExecuteCloneCommand(config *appConfig.AppConfig) {
 		labApi := gitlab.NewGitlabAPI(token, gitLabConfig.HostName)
 		channeledApi := gitlab.NewChanneledApi(labApi, &gitLabConfig)
 
-		gitlabProjectChannel := channeledApi.ScheduleGitlabGroupProjectsFetch(gitLabConfig.Groups)
-		// RACE CONDITION HERE...should not use same channel for scheduling projects for cloning below.......
-		reposChannel := gitlab.ConvertProjectsToRepos(gitlabProjectChannel)
+		gitlabGroupProjectsChannel := channeledApi.ScheduleGitlabGroupProjectsFetch(gitLabConfig.Groups)
+		reposChannel := gitlab.ConvertProjectsToRepos(gitlabGroupProjectsChannel)
 
-		var cloneChannelRateLimited = channel.RateLimit[*gitrepo.Repository](gitrepo.FilterCloneNeeded(reposChannel), gitLabConfig.GetConfiguredCloneRate(), 10)
+		remoteRepoChannel := gitlab.ScheduleRemoteProjects(gitLabConfig)
+
+		var potentialClonesChannel []<-chan *gitrepo.Repository
+		potentialClonesChannel = append(potentialClonesChannel, reposChannel, remoteRepoChannel)
+		in := lo.FanIn(appConfig.DefaultChannelBufferLength, potentialClonesChannel...)
+		var cloneChannelRateLimited = channel.RateLimit[*gitrepo.Repository](gitrepo.FilterCloneNeeded(in), gitLabConfig.GetConfiguredCloneRate(), 10)
 
 		cloneChannelsRateLimited = append(cloneChannelsRateLimited, cloneChannelRateLimited)
-
-		gitlab.ScheduleProjectsForCloning(gitLabConfig, reposChannel)
 	}
 	cloneCount := gitrepo.CloneRepositories(lo.FanIn(appConfig.DefaultChannelBufferLength, cloneChannelsRateLimited...))
 

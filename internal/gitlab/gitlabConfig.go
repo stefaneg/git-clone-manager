@@ -2,9 +2,12 @@ package gitlab
 
 import (
 	"os"
+	"time"
+	"tools/internal/color"
 	"tools/internal/ext"
 	"tools/internal/gitremote"
 	"tools/internal/gitrepo"
+	logger "tools/internal/log"
 )
 
 // This rate is tested to minimise error rate on cloning 250 repositories.
@@ -33,9 +36,17 @@ func (gitLabConfig GitLabConfig) GetConfiguredCloneRate() int {
 	return ext.DefaultValue(gitLabConfig.RateLimitPerSecond, DefaultGitlabRateLimit)
 }
 
-func ScheduleProjectsForCloning(gitLabConfig GitLabConfig, checkCloneChannel chan *gitrepo.Repository) {
-	for _, prj := range gitLabConfig.Projects {
-		repo := gitrepo.CreateFromGitRemoteConfig(prj, gitLabConfig.HostName, gitLabConfig.CloneDirectory)
-		checkCloneChannel <- repo
-	}
+func ScheduleRemoteProjects(gitLabConfig GitLabConfig) chan *gitrepo.Repository {
+	repoChannel := make(chan *gitrepo.Repository, GroupChannelBufferSize)
+	go func() {
+		startTime := time.Now()
+		for _, prj := range gitLabConfig.Projects {
+			repo := gitrepo.CreateFromGitRemoteConfig(prj, gitLabConfig.HostName, gitLabConfig.CloneDirectory)
+			repoChannel <- repo
+		}
+		logger.Log.Infof(color.FgGreen("Repos scheduled in %.2f seconds"), time.Since(startTime).Seconds())
+
+		close(repoChannel)
+	}()
+	return repoChannel
 }

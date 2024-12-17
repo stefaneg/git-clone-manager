@@ -22,6 +22,7 @@ type Repository struct {
 type CloneOptions interface {
 	CloneArchived() bool
 	CloneRootDirectory() string
+	// ... add project metadata
 }
 
 func (repo *Repository) Clone() error {

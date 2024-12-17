@@ -28,7 +28,7 @@ func CloneRepositories(repositories <-chan *Repository) int {
 	return cloneCount
 }
 
-func FilterCloneNeeded(checkCloneChannel chan *Repository) chan *Repository {
+func FilterCloneNeeded(checkCloneChannel <-chan *Repository) chan *Repository {
 	gitCloneChannel := make(chan *Repository, 20)
 	checkWaitGroup := sync.WaitGroup{}
 	go func() {
