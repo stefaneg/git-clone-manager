@@ -33,11 +33,10 @@ func ExecuteCloneCommand(config *appConfig.AppConfig) {
 
 		labApi := gitlab.NewGitlabAPI(token, gitLabConfig.HostName)
 		channeledApi := gitlab.NewChanneledApi(labApi, &gitLabConfig)
+		remoteRepoChannel := channeledApi.ScheduleRemoteProjects()
 
 		gitlabGroupProjectsChannel := channeledApi.ScheduleGitlabGroupProjectsFetch(gitLabConfig.Groups)
 		reposChannel := gitlab.ConvertProjectsToRepos(gitlabGroupProjectsChannel)
-
-		remoteRepoChannel := gitlab.ScheduleRemoteProjects(gitLabConfig)
 
 		var potentialClonesChannel []<-chan *gitrepo.Repository
 		potentialClonesChannel = append(potentialClonesChannel, reposChannel, remoteRepoChannel)

@@ -151,3 +151,16 @@ func ConvertProjectsToRepos(gitlabProjectChannel <-chan ProjectMetadata) chan *g
 	}()
 	return gitRepoChannel
 }
+
+func (channeledApi *ChanneledApi) ScheduleRemoteProjects() chan *gitrepo.Repository {
+	repoChannel := make(chan *gitrepo.Repository, GroupChannelBufferSize)
+	go func() {
+		for _, prj := range channeledApi.config.Projects {
+			repo := gitrepo.CreateFromGitRemoteConfig(prj, channeledApi.config.HostName, channeledApi.config.CloneDirectory)
+			repoChannel <- repo
+		}
+
+		close(repoChannel)
+	}()
+	return repoChannel
+}
