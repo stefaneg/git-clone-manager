@@ -39,13 +39,13 @@ func main() {
 func loadConfig(configFileName string) (*appConfig.AppConfig, error) {
 	configFilePath := filepath.Join("./", configFileName)
 
-	if _, err := os.Stat(configFileName); os.IsNotExist(err) {
+	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			return nil, fmt.Errorf("could not determine home directory: %v", err)
 		}
 		configFilePath = filepath.Join(homeDir, configFileName)
-		if _, err := os.Stat(configFileName); os.IsNotExist(err) {
+		if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
 			return nil, fmt.Errorf("config file not found in current directory or home directory")
 		}
 	}
