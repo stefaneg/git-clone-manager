@@ -5,6 +5,7 @@ import (
 	"github.com/samber/lo"
 	"sync"
 	"tools/internal/color"
+	"tools/internal/counter"
 	"tools/internal/gitrepo"
 	. "tools/internal/log"
 )
@@ -13,14 +14,16 @@ const GroupChannelBufferSize = 20
 const ProjectChannelBufferSize = 20
 
 type ChanneledApi struct {
-	api    *RepositoryAPI
-	config *GitLabConfig
+	api            *RepositoryAPI
+	config         *GitLabConfig
+	projectCounter *counter.Counter
+	groupCounter   *counter.Counter
 }
 
 // NEXT: ADD Reporting counters and error channel handler...
 
-func NewChanneledApi(repo *RepositoryAPI, config *GitLabConfig) *ChanneledApi {
-	return &ChanneledApi{api: repo, config: config}
+func NewChanneledApi(repo *RepositoryAPI, config *GitLabConfig, projectCounter *counter.Counter, groupCounter *counter.Counter) *ChanneledApi {
+	return &ChanneledApi{api: repo, config: config, projectCounter: projectCounter, groupCounter: groupCounter}
 }
 
 func (channeledApi *ChanneledApi) fetchProjectsForGroup(group *GitlabApiGroup, rootGroupConfig *GitLabGroupConfig, projectChannel chan ProjectMetadata) {
@@ -32,6 +35,7 @@ func (channeledApi *ChanneledApi) fetchProjectsForGroup(group *GitlabApiGroup, r
 		project.Group = group
 		project.GitLabConfig = channeledApi.config
 		project.GroupConfig = rootGroupConfig
+		channeledApi.projectCounter.Add(1)
 		projectChannel <- project
 	}
 }
@@ -102,7 +106,7 @@ func (channeledApi *ChanneledApi) FetchAndChannelGroupProjects(rootGroupConfig *
 			if !ok {
 				break
 			}
-
+			channeledApi.groupCounter.Add(1)
 			pwg.Add(1)
 			go func() {
 				defer pwg.Done()

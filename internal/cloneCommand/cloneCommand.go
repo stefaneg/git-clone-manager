@@ -8,6 +8,7 @@ import (
 	"tools/internal/appConfig"
 	"tools/internal/channel"
 	"tools/internal/color"
+	"tools/internal/counter"
 	"tools/internal/gitlab"
 	"tools/internal/gitrepo"
 	"tools/internal/log"
@@ -15,7 +16,14 @@ import (
 
 func ExecuteCloneCommand(config *appConfig.AppConfig) {
 	startTime := time.Now()
+	clonedNowCounter := counter.NewCounter()
+	cloneCounter := counter.NewCounter()
+	archivedClonesCounter := counter.NewCounter()
+	projectCounter := counter.NewCounter()
+	groupCounter := counter.NewCounter()
+
 	var cloneChannelsRateLimited []<-chan *gitrepo.Repository
+
 	for _, gitLabConfig := range config.GitLab {
 
 		token := gitLabConfig.RetrieveTokenFromEnv()
@@ -32,7 +40,7 @@ func ExecuteCloneCommand(config *appConfig.AppConfig) {
 		}
 
 		labApi := gitlab.NewGitlabAPI(token, gitLabConfig.HostName)
-		channeledApi := gitlab.NewChanneledApi(labApi, &gitLabConfig)
+		channeledApi := gitlab.NewChanneledApi(labApi, &gitLabConfig, projectCounter, groupCounter)
 		remoteRepoChannel := channeledApi.ScheduleRemoteProjects()
 
 		gitlabGroupProjectsChannel := channeledApi.ScheduleGitlabGroupProjectsFetch(gitLabConfig.Groups)
@@ -41,11 +49,11 @@ func ExecuteCloneCommand(config *appConfig.AppConfig) {
 		var potentialClonesChannel []<-chan *gitrepo.Repository
 		potentialClonesChannel = append(potentialClonesChannel, reposChannel, remoteRepoChannel)
 		in := lo.FanIn(appConfig.DefaultChannelBufferLength, potentialClonesChannel...)
-		var cloneChannelRateLimited = channel.RateLimit[*gitrepo.Repository](gitrepo.FilterCloneNeeded(in), gitLabConfig.GetConfiguredCloneRate(), 10)
+		var cloneChannelRateLimited = channel.RateLimit[*gitrepo.Repository](gitrepo.FilterCloneNeeded(in, archivedClonesCounter, cloneCounter), gitLabConfig.GetConfiguredCloneRate(), 10)
 
 		cloneChannelsRateLimited = append(cloneChannelsRateLimited, cloneChannelRateLimited)
 	}
-	cloneCount := gitrepo.CloneRepositories(lo.FanIn(appConfig.DefaultChannelBufferLength, cloneChannelsRateLimited...))
+	gitrepo.CloneRepositories(lo.FanIn(appConfig.DefaultChannelBufferLength, cloneChannelsRateLimited...), clonedNowCounter)
 
-	logger.Log.Infof(color.FgGreen("%d repos, %d cloned. %.2f seconds"), 999, cloneCount, time.Since(startTime).Seconds())
+	logger.Log.Infof(color.FgGreen("%d projects in %d groups\n  %d git clones\n  %d cloned now\n%.2f seconds"), projectCounter.Count(), groupCounter.Count(), cloneCounter.Count(), clonedNowCounter.Count(), time.Since(startTime).Seconds())
 }

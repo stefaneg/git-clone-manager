@@ -55,21 +55,29 @@ func (repo *Repository) Clone() error {
 }
 
 func (repo *Repository) CheckNeedsCloning() (bool, error) {
-	projectPath := repo.getWorkingCopyPath(repo.CloneOptions.CloneRootDirectory())
-
-	if _, err := os.Stat(path.Join(projectPath, ".git")); !os.IsNotExist(err) {
-		if Log.GetLevel() >= logrus.DebugLevel {
-			Log.Debugf("Git repository %s already exists at %s, skipping clone\n", color.FgMagenta(repo.Name), color.FgMagenta(projectPath))
-		}
-		return false, nil // Skip cloning if directory already exists
+	cloned, err := repo.IsCloned()
+	if err != nil {
+		return false, err
+	}
+	if cloned {
+		return false, nil
 	}
 	if !repo.cloneArchived() && repo.Archived {
-		if Log.GetLevel() >= logrus.DebugLevel {
-			Log.Debugf("Skipping archived repo %s %s", color.FgMagenta(repo.Name), color.FgMagenta(projectPath))
-		}
 		return false, nil
 	}
 	return true, nil
+}
+
+func (repo *Repository) IsCloned() (bool, error) {
+	projectPath := repo.getWorkingCopyPath(repo.CloneOptions.CloneRootDirectory())
+	gitDir, err := os.Stat(path.Join(projectPath, ".git"))
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return gitDir.IsDir(), nil
 }
 
 func (repo *Repository) getWorkingCopyPath(cloneDirectory string) string {

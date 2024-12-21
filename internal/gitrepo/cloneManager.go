@@ -3,18 +3,18 @@ package gitrepo
 import (
 	"sync"
 	"tools/internal/color"
+	"tools/internal/counter"
 	"tools/internal/log"
 )
 
-func CloneRepositories(repositories <-chan *Repository) int {
+func CloneRepositories(repositories <-chan *Repository, cloneCounter *counter.Counter) {
 	cloneWaitGroup := sync.WaitGroup{}
-	cloneCount := 0
 	for {
 		receivedRepo, ok := <-repositories
 		if !ok {
 			break
 		}
-		cloneCount++
+		cloneCounter.Add(1)
 		cloneWaitGroup.Add(1)
 		go func() {
 			defer cloneWaitGroup.Done()
@@ -25,10 +25,9 @@ func CloneRepositories(repositories <-chan *Repository) int {
 		}()
 	}
 	cloneWaitGroup.Wait()
-	return cloneCount
 }
 
-func FilterCloneNeeded(checkCloneChannel <-chan *Repository) chan *Repository {
+func FilterCloneNeeded(checkCloneChannel <-chan *Repository, archivedCounter *counter.Counter, clonedCounter *counter.Counter) chan *Repository {
 	gitCloneChannel := make(chan *Repository, 20)
 	checkWaitGroup := sync.WaitGroup{}
 	go func() {
@@ -38,7 +37,17 @@ func FilterCloneNeeded(checkCloneChannel <-chan *Repository) chan *Repository {
 				logger.Log.Tracef("%s \n", "Clone channel close, wait for last clone to finish, then breaking")
 				break
 			}
+			if receivedRepo.Archived && receivedRepo.CloneOptions.CloneArchived() {
+				archivedCounter.Add(1)
+			}
+
 			needsCloning, _ := receivedRepo.CheckNeedsCloning()
+			cloned, _ := receivedRepo.IsCloned()
+			// TODO ADD ERROR HANDLING CHANNEL
+			if cloned || needsCloning {
+				clonedCounter.Add(1)
+			}
+
 			if needsCloning {
 				checkWaitGroup.Add(1)
 				go func() {
