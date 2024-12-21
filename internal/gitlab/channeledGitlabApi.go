@@ -24,14 +24,10 @@ func NewChanneledApi(repo *RepositoryAPI, config *GitLabConfig) *ChanneledApi {
 }
 
 func (channeledApi *ChanneledApi) fetchProjectsForGroup(group *GitlabApiGroup, rootGroupConfig *GitLabGroupConfig, projectChannel chan ProjectMetadata) {
-
-	var allProjects []ProjectMetadata
-
 	projects, err := channeledApi.api.fetchProjects(group)
 	if err != nil {
 		Log.Printf("Failed to fetch projects for group %s: %v", group.Name, err)
 	}
-	allProjects = append(allProjects, projects...)
 	for _, project := range projects {
 		project.Group = group
 		project.GitLabConfig = channeledApi.config
@@ -43,7 +39,7 @@ func (channeledApi *ChanneledApi) fetchProjectsForGroup(group *GitlabApiGroup, r
 func (channeledApi *ChanneledApi) channelSubgroups(groupId string, gwg *sync.WaitGroup, groupChannel chan *GitlabApiGroup) {
 	subgroups, err := channeledApi.api.fetchSubgroups(groupId)
 	if err != nil {
-		Log.Errorf(fmt.Sprintf("failed to fetch subgroups for group %s: %w", groupId, err))
+		Log.Errorf("failed to fetch subgroups for group %s: %v", groupId, err)
 	}
 	for _, subgroup := range subgroups {
 		gwg.Add(1)
@@ -62,7 +58,7 @@ func (channeledApi *ChanneledApi) channelGroups(rootGroupConfig *GitLabGroupConf
 
 	rootGroup, err := channeledApi.api.fetchGroupInfo(rootGroupConfig.Name)
 	if err != nil {
-		Log.Errorf("failed to fetch rootGroupConfig info for rootGroupConfig %s: %w", rootGroupConfig.Name, err)
+		Log.Errorf("failed to fetch rootGroupConfig info for rootGroupConfig %s: %v", rootGroupConfig.Name, err)
 	}
 
 	// Matching Done is where subgroups have been fetched and all sent to fetch channel

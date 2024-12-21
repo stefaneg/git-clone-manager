@@ -85,13 +85,13 @@ func (repo *Repository) WriteArchivedMarker(projectPath string) error {
 	// Create the marker file
 	file, err := os.Create(markerFilePath)
 	if err != nil {
-		Log.Errorf("failed to create marker file: %w", err)
+		Log.Errorf("failed to create marker file: %v", err)
 		return err
 	}
 	defer func(file *os.File) {
 		err := file.Close()
 		if err != nil {
-			Log.Errorf("failed to close marker file: %w", err)
+			Log.Errorf("failed to close marker file: %v", err)
 		}
 	}(file)
 
