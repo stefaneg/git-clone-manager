@@ -1,4 +1,4 @@
-# Gulli's Personal Tools written in Go
+# Git Clone Manager
 
 ## Scratching personal itches which may become tools to scratch someone else's itch as well.
 
@@ -14,8 +14,8 @@
 
 1. Clone the repository:
     ```sh
-    git clone https://github.com/yourusername/yourrepository.git
-    cd yourrepository
+    git clone https://github.com/stefaneg/git-clone-manager.git
+    cd git-clone-manager
     ```
 
 2. Install dependencies:
@@ -41,7 +41,7 @@
             fullPath: "group/project"
     ```
 
-Note that you also need to be authenticated in git with permissions to clone projects.
+Note that you also need to be authenticated in git with permissions to clone projects with an ssh key.
 
 2. Set the environment variable for your GitLab API token:
     ```sh
@@ -55,7 +55,6 @@ Compile the git clone manager using the Go compiler:
 go build -o gcm
 ```
 
-
 # To do
 - Collect error counts, archived counts. 
 - Separate into goroutine-free access / repository classes and pipeline classes to collect results.
@@ -67,3 +66,4 @@ go build -o gcm
 - Collect statistics - how many projects processed - checked out - archived
 - Report all projects that have a) have uncommitted changes b) are behind origin or without a tracked remote branch c) are checked out on a branch.
 - Create command to pull changes on projects on main and with a clean index.
+- Support GitHub api to clone organisations.

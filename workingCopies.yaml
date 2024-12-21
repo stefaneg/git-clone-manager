@@ -1,28 +1,11 @@
 gitlab:
   - tokenEnvVar: "GITLAB_API_TOKEN"
-    hostName: 'gitlab.controlant.com'
+    hostName: 'gitlab.com'
     cloneDirectory: 'cloned_projects'
-#    cloneDirectory: '/Users/gudlaugur.egilsson/src/controlant' # Use full path only. Shell expansion not supported (f.ex. ~)
     rateLimitPerSecond: 7 # Default gitlab rate limit is 10 per second (600 per minute)
     groups:
-      - name: "ops"
+      - name: "mygroup"
         cloneArchived: true
-      - name: "catapult"
-        cloneArchived: false
-      - name: "DevOps"
-        cloneArchived: false
     projects:
-      - name: "Notes"
-        fullPath: "gudlaugur.egilsson/notes"
-      - name: "Tools"
-        fullPath: "gudlaugur.egilsson/tools"
-      - name: "test-automation-reporter"
-        fullPath: "qaet/test-automation-reporter"
-      - name: "ci-central"
-        fullPath: "qaet/ci-central"
-      - name: "testrail-archive"
-        fullPath: "qaet/testrail-archive"
-      - name: "readme-template"
-        fullPath: "templates/readme-template"
-      - name: "Fleet manager api"
-        fullPath: "dfl/fleet-manager/fleet-manager-api"
+      - name: "MyOtherProject"
+        fullPath: "memyself/my-other-project"
