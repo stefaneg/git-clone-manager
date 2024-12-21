@@ -50,15 +50,16 @@ Note that you also need to be authenticated in git with permissions to clone pro
 
 ### Compilation
 
-Compile the project using the Go compiler:
+Compile the git clone manager using the Go compiler:
 ```shell
-go build -o wcmanager
+go build -o gcm
 ```
 
 
 # To do
 - Collect error counts, archived counts. 
 - Separate into goroutine-free access / repository classes and pipeline classes to collect results.
+- Log commands issued on each repository in separate files. Where exactly is a bit tricky...
 - Delete branches without remote.
 - Create command that reports projects that are not on main branch
 - Create command that reports projects with dirty index
