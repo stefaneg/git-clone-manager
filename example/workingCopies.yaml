@@ -1,0 +1,11 @@
+gitlab:
+  - tokenEnvVar: "GITLAB_API_TOKEN"
+    hostName: 'gitlab.com'
+    cloneDirectory: 'cloned_projects'
+    rateLimitPerSecond: 7 # Default gitlab rate limit is 10 per second (600 per minute)
+    groups:
+      - name: "mygroup"
+        cloneArchived: true
+    projects:
+      - name: "MyOtherProject"
+        fullPath: "memyself/my-other-project"
