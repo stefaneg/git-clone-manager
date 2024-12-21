@@ -56,7 +56,7 @@ go build -o gcm
 ```
 
 # To do
-- Collect error counts, archived counts. 
+- Collect error counts, output errors. 
 - Separate into goroutine-free access / repository classes and pipeline classes to collect results.
 - Log commands issued on each repository in separate files. Where exactly is a bit tricky...
 - Delete branches without remote.

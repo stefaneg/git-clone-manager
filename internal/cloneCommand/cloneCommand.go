@@ -36,7 +36,7 @@ func ExecuteCloneCommand(config *appConfig.AppConfig) {
 
 		err := os.MkdirAll(gitLabConfig.CloneDirectory, os.ModePerm)
 		if err != nil {
-			logger.Log.Fatalf("Failed to create clone directory: %v", err)
+			logger.Log.Fatalf("Failed to create clone root directory: %v", err)
 		}
 
 		labApi := gitlab.NewGitlabAPI(token, gitLabConfig.HostName)
@@ -55,5 +55,11 @@ func ExecuteCloneCommand(config *appConfig.AppConfig) {
 	}
 	gitrepo.CloneRepositories(lo.FanIn(appConfig.DefaultChannelBufferLength, cloneChannelsRateLimited...), clonedNowCounter)
 
-	logger.Log.Infof(color.FgGreen("%d projects in %d groups\n  %d git clones\n  %d cloned now\n%.2f seconds"), projectCounter.Count(), groupCounter.Count(), cloneCounter.Count(), clonedNowCounter.Count(), time.Since(startTime).Seconds())
+	logger.Log.Infof("%s projects in %s groups\n%s git clones (%s archived) \n%s cloned now\n%s seconds",
+		color.FgMagenta(fmt.Sprintf("%d", projectCounter.Count())),
+		color.FgMagenta(fmt.Sprintf("%d", groupCounter.Count())),
+		color.FgMagenta(fmt.Sprintf("%d", cloneCounter.Count())),
+		color.FgMagenta(fmt.Sprintf("%d", archivedClonesCounter.Count())),
+		color.FgMagenta(fmt.Sprintf("%d", clonedNowCounter.Count())),
+		color.FgGreen(fmt.Sprintf("%.2f", time.Since(startTime).Seconds())))
 }
