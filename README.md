@@ -1,6 +1,6 @@
 # Git Clone Manager
 
-## Scratching personal itches which may become tools to scratch someone else's itch as well.
+## Scratching personal itches which may scratch someone else's itch as well.
 
 ## Getting Started
 
@@ -54,6 +54,12 @@ Compile the git clone manager using the Go compiler:
 ```shell
 go build -o gcm
 ```
+
+# Use
+
+Currently, the only command is "clone". Running ```gcm``` will clone all groups and projects specified in your 
+configuration file.
+
 
 # To do
 - Collect error counts, output errors. 
