@@ -39,7 +39,7 @@ func ExecuteCloneCommand(config *appConfig.AppConfig) {
 			logger.Log.Fatalf("Failed to create clone root directory: %v", err)
 		}
 
-		labApi := gitlab.NewGitlabAPI(token, gitLabConfig.HostName)
+		labApi := gitlab.NewAPIClient(token, gitLabConfig.HostName)
 		channeledApi := gitlab.NewChanneledApi(labApi, &gitLabConfig, projectCounter, groupCounter)
 		remoteRepoChannel := channeledApi.ScheduleRemoteProjects()
 

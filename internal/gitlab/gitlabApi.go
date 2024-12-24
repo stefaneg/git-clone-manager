@@ -8,27 +8,27 @@ import (
 	"tools/internal/log"
 )
 
-type GitlabApiGroup struct {
+type Group struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
 }
 
-type ProjectMetadata struct {
+type Project struct {
 	Name              string `json:"name"`
 	SSHURLToRepo      string `json:"ssh_url_to_repo"`
 	PathWithNamespace string `json:"path_with_namespace"`
 	Archived          bool   `json:"archived"`
-	Group             *GitlabApiGroup
-	GroupConfig       *GitLabGroupConfig
+	Group             *Group
+	GroupConfig       *GroupConfig
 	GitLabConfig      *GitLabConfig
 }
 
-func (p ProjectMetadata) CloneArchived() bool {
+func (p Project) CloneArchived() bool {
 	cloneArchived := p.GroupConfig.CloneArchived
 	return cloneArchived
 }
 
-func (p ProjectMetadata) CloneRootDirectory() string {
+func (p Project) CloneRootDirectory() string {
 	return p.GitLabConfig.CloneDirectory
 }
 
@@ -37,32 +37,32 @@ It adheres to the Repository pattern as well - it is at the boundary to external
 All methods should be synchronous - channels and pipes handled in other classes/methods.
 */
 
-type RepositoryAPI struct {
+type APIClient struct {
 	hostName string
 	token    string
 }
 
-func NewGitlabAPI(token, hostName string) *RepositoryAPI {
-	return &RepositoryAPI{
+func NewAPIClient(token, hostName string) *APIClient {
+	return &APIClient{
 		hostName: hostName,
 		token:    token,
 	}
 }
 
-func (labApi RepositoryAPI) url() string {
-	return fmt.Sprintf("https://%s/api/v4", labApi.hostName)
+func (apiClient APIClient) url() string {
+	return fmt.Sprintf("https://%s/api/v4", apiClient.hostName)
 }
 
-func (labApi RepositoryAPI) fetchProjects(group *GitlabApiGroup) ([]ProjectMetadata, error) {
-	return gitlabGet[[]ProjectMetadata](labApi.token, fmt.Sprintf("%s/groups/%d/projects", labApi.url(), group.ID))
+func (apiClient APIClient) fetchProjects(group *Group) ([]Project, error) {
+	return gitlabGet[[]Project](apiClient.token, fmt.Sprintf("%s/groups/%d/projects", apiClient.url(), group.ID))
 }
 
-func (labApi RepositoryAPI) fetchSubgroups(groupID string) ([]GitlabApiGroup, error) {
-	return gitlabGet[[]GitlabApiGroup](labApi.token, fmt.Sprintf("%s/groups/%s/subgroups", labApi.url(), groupID))
+func (apiClient APIClient) fetchSubgroups(groupID string) ([]Group, error) {
+	return gitlabGet[[]Group](apiClient.token, fmt.Sprintf("%s/groups/%s/subgroups", apiClient.url(), groupID))
 }
 
-func (labApi RepositoryAPI) fetchGroupInfo(groupID string) (*GitlabApiGroup, error) {
-	return gitlabGet[*GitlabApiGroup](labApi.token, fmt.Sprintf("%s/groups/%s", labApi.url(), groupID))
+func (apiClient APIClient) fetchGroupInfo(groupID string) (*Group, error) {
+	return gitlabGet[*Group](apiClient.token, fmt.Sprintf("%s/groups/%s", apiClient.url(), groupID))
 }
 
 func gitlabGet[T any](token string, url string) (T, error) {

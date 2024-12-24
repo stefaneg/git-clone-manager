@@ -14,7 +14,7 @@ const GroupChannelBufferSize = 20
 const ProjectChannelBufferSize = 20
 
 type ChanneledApi struct {
-	api            *RepositoryAPI
+	api            *APIClient
 	config         *GitLabConfig
 	projectCounter *counter.Counter
 	groupCounter   *counter.Counter
@@ -22,14 +22,15 @@ type ChanneledApi struct {
 
 // NEXT: ADD Reporting counters and error channel handler...
 
-func NewChanneledApi(repo *RepositoryAPI, config *GitLabConfig, projectCounter *counter.Counter, groupCounter *counter.Counter) *ChanneledApi {
+func NewChanneledApi(repo *APIClient, config *GitLabConfig, projectCounter *counter.Counter, groupCounter *counter.Counter) *ChanneledApi {
 	return &ChanneledApi{api: repo, config: config, projectCounter: projectCounter, groupCounter: groupCounter}
 }
 
-func (channeledApi *ChanneledApi) fetchProjectsForGroup(group *GitlabApiGroup, rootGroupConfig *GitLabGroupConfig, projectChannel chan ProjectMetadata) {
+func (channeledApi *ChanneledApi) fetchProjectsForGroup(group *Group, rootGroupConfig *GroupConfig, projectChannel chan Project) {
 	projects, err := channeledApi.api.fetchProjects(group)
 	if err != nil {
-		Log.Printf("Failed to fetch projects for group %s: %v", group.Name, err)
+		Log.Errorf("failed to fetch projects for group %s: %v", group.Name, err)
+		return
 	}
 	for _, project := range projects {
 		project.Group = group
@@ -40,10 +41,11 @@ func (channeledApi *ChanneledApi) fetchProjectsForGroup(group *GitlabApiGroup, r
 	}
 }
 
-func (channeledApi *ChanneledApi) channelSubgroups(groupId string, gwg *sync.WaitGroup, groupChannel chan *GitlabApiGroup) {
+func (channeledApi *ChanneledApi) channelSubgroups(groupId string, gwg *sync.WaitGroup, groupChannel chan *Group) {
 	subgroups, err := channeledApi.api.fetchSubgroups(groupId)
 	if err != nil {
 		Log.Errorf("failed to fetch subgroups for group %s: %v", groupId, err)
+		return
 	}
 	for _, subgroup := range subgroups {
 		gwg.Add(1)
@@ -55,14 +57,15 @@ func (channeledApi *ChanneledApi) channelSubgroups(groupId string, gwg *sync.Wai
 	gwg.Done()
 }
 
-func (channeledApi *ChanneledApi) channelGroups(rootGroupConfig *GitLabGroupConfig, subGroupsChannel chan<- *GitlabApiGroup) {
+func (channeledApi *ChanneledApi) channelGroups(rootGroupConfig *GroupConfig, subGroupsChannel chan<- *Group) {
 
 	gwg := sync.WaitGroup{}
-	groupWorkList := make(chan *GitlabApiGroup, GroupChannelBufferSize)
+	groupWorkList := make(chan *Group, GroupChannelBufferSize)
 
 	rootGroup, err := channeledApi.api.fetchGroupInfo(rootGroupConfig.Name)
 	if err != nil {
 		Log.Errorf("failed to fetch rootGroupConfig info for rootGroupConfig %s: %v", rootGroupConfig.Name, err)
+		return
 	}
 
 	// Matching Done is where subgroups have been fetched and all sent to fetch channel
@@ -90,10 +93,10 @@ func (channeledApi *ChanneledApi) channelGroups(rootGroupConfig *GitLabGroupConf
 	close(groupWorkList)
 }
 
-func (channeledApi *ChanneledApi) FetchAndChannelGroupProjects(rootGroupConfig *GitLabGroupConfig) chan ProjectMetadata {
+func (channeledApi *ChanneledApi) FetchAndChannelGroupProjects(rootGroupConfig *GroupConfig) chan Project {
 	pwg := sync.WaitGroup{}
-	groupChannel := make(chan *GitlabApiGroup, GroupChannelBufferSize)
-	gitlabProjectChannel := make(chan ProjectMetadata, ProjectChannelBufferSize)
+	groupChannel := make(chan *Group, GroupChannelBufferSize)
+	gitlabProjectChannel := make(chan Project, ProjectChannelBufferSize)
 	pwg.Add(1)
 	go func() {
 		defer pwg.Done()
@@ -121,15 +124,15 @@ func (channeledApi *ChanneledApi) FetchAndChannelGroupProjects(rootGroupConfig *
 	return gitlabProjectChannel
 }
 
-func (channeledApi *ChanneledApi) ScheduleGitlabGroupProjectsFetch(groups []GitLabGroupConfig) <-chan ProjectMetadata {
-	var projectChannels []<-chan ProjectMetadata
+func (channeledApi *ChanneledApi) ScheduleGitlabGroupProjectsFetch(groups []GroupConfig) <-chan Project {
+	var projectChannels []<-chan Project
 	for _, group := range groups {
 		projectChannels = append(projectChannels, channeledApi.FetchAndChannelGroupProjects(&group))
 	}
 	return lo.FanIn(ProjectChannelBufferSize, projectChannels...)
 }
 
-func ConvertProjectsToRepos(gitlabProjectChannel <-chan ProjectMetadata) chan *gitrepo.Repository {
+func ConvertProjectsToRepos(gitlabProjectChannel <-chan Project) chan *gitrepo.Repository {
 	gitRepoChannel := make(chan *gitrepo.Repository, 10)
 
 	go func() {
