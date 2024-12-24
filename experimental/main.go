@@ -59,18 +59,18 @@ func (r *Renderer) Render() {
 
 func (r *Renderer) renderTTY() {
 	// Initial placeholder rendering to create space for counters
-	r.printCounters(r.store.GetCounters())
+	r.printCounters()
 
 	for {
-		counters := r.store.GetCounters()
 		// Move cursor up by the number of counters
 		fmt.Printf("\033[%dA", r.numCounters)
-		r.printCounters(counters)
+		r.printCounters()
 		time.Sleep(100 * time.Millisecond) // Refresh rate
 	}
 }
 
-func (r *Renderer) printCounters(counters []int64) {
+func (r *Renderer) printCounters() {
+	counters := r.store.GetCounters()
 	for i := 0; i < r.numCounters; i++ {
 		fmt.Printf("Counter %d: %d\n", i+1, counters[i])
 	}
@@ -78,11 +78,8 @@ func (r *Renderer) printCounters(counters []int64) {
 
 func (r *Renderer) renderNonTTY() {
 	for {
-		counters := r.store.GetCounters()
 		fmt.Println("---")
-		for i := 0; i < r.numCounters; i++ {
-			fmt.Printf("Counter %d: %d\n", i+1, counters[i])
-		}
+		r.printCounters()
 		time.Sleep(1 * time.Second) // Refresh rate
 	}
 }

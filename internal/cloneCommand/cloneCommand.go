@@ -1,8 +1,8 @@
 package cloneCommand
 
 import (
-	"fmt"
 	"github.com/samber/lo"
+	"golang.org/x/term"
 	"os"
 	"time"
 	"tools/internal/appConfig"
@@ -12,6 +12,7 @@ import (
 	"tools/internal/gitlab"
 	"tools/internal/gitrepo"
 	"tools/internal/log"
+	"tools/internal/renderer"
 )
 
 func ExecuteCloneCommand(config *appConfig.AppConfig) {
@@ -24,6 +25,22 @@ func ExecuteCloneCommand(config *appConfig.AppConfig) {
 
 	var cloneChannelsRateLimited []<-chan *gitrepo.Repository
 
+	cloneViewModel := renderer.CloneViewModel{
+		StartTime:            startTime,
+		ClonedNowCount:       clonedNowCounter,
+		ProjectCount:         projectCounter,
+		CloneCount:           cloneCounter,
+		GroupCount:           groupCounter,
+		ArchivedCloneCounter: archivedClonesCounter,
+	}
+	// Check if output is a TTY
+	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
+
+	r := renderer.NewRenderer(&cloneViewModel, isTTY)
+	if isTTY {
+		go r.StartTTYRenderLoop()
+	}
+
 	for _, gitLabConfig := range config.GitLab {
 
 		token := gitLabConfig.RetrieveTokenFromEnv()
@@ -32,7 +49,7 @@ func ExecuteCloneCommand(config *appConfig.AppConfig) {
 			continue
 		}
 
-		logger.Log.Infof("Cloning %s groups & %s projects from %s into %s", color.FgMagenta(fmt.Sprintf("%d", len(gitLabConfig.Groups))), color.FgMagenta(fmt.Sprintf("%d", len(gitLabConfig.Projects))), color.FgCyan(gitLabConfig.HostName), color.FgCyan(gitLabConfig.CloneDirectory))
+		// logger.Log.Infof("Cloning %s groups & %s projects from %s into %s", color.FgMagenta(fmt.Sprintf("%d", len(gitLabConfig.Groups))), color.FgMagenta(fmt.Sprintf("%d", len(gitLabConfig.Projects))), color.FgCyan(gitLabConfig.HostName), color.FgCyan(gitLabConfig.CloneDirectory))
 
 		err := os.MkdirAll(gitLabConfig.CloneDirectory, os.ModePerm)
 		if err != nil {
@@ -55,11 +72,7 @@ func ExecuteCloneCommand(config *appConfig.AppConfig) {
 	}
 	gitrepo.CloneRepositories(lo.FanIn(appConfig.DefaultChannelBufferLength, cloneChannelsRateLimited...), clonedNowCounter)
 
-	logger.Log.Infof("%s projects in %s groups\n%s git clones (%s archived) \n%s cloned now\n%s seconds",
-		color.FgMagenta(fmt.Sprintf("%d", projectCounter.Count())),
-		color.FgMagenta(fmt.Sprintf("%d", groupCounter.Count())),
-		color.FgMagenta(fmt.Sprintf("%d", cloneCounter.Count())),
-		color.FgMagenta(fmt.Sprintf("%d", archivedClonesCounter.Count())),
-		color.FgMagenta(fmt.Sprintf("%d", clonedNowCounter.Count())),
-		color.FgGreen(fmt.Sprintf("%.2f", time.Since(startTime).Seconds())))
+	if !isTTY {
+		r.RenderNonTTY()
+	}
 }
