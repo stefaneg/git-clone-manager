@@ -1,9 +1,9 @@
 package gitlab
 
 import (
+	"gcm/internal/ext"
+	"gcm/internal/gitremote"
 	"os"
-	"tools/internal/ext"
-	"tools/internal/gitremote"
 )
 
 // This rate is tested to minimise error rate on cloning 250 repositories.

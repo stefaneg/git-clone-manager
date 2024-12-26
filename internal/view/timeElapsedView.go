@@ -2,9 +2,10 @@ package view
 
 import (
 	"fmt"
+	"gcm/internal/color"
 	"io"
+	"strings"
 	"time"
-	"tools/internal/color"
 )
 
 type TimeElapsedView struct {
@@ -21,10 +22,12 @@ func NewTimeElapsedView(startTime time.Time, stdout io.Writer, since func(time.T
 	}
 }
 
-func (t *TimeElapsedView) Render() {
+func (t *TimeElapsedView) Render() int {
 	elapsed := t.since(t.startTime).Seconds()
-	_, err := fmt.Fprintf(t.stdout, "%s seconds\n", color.FgGreen(fmt.Sprintf("%.2f", elapsed)))
+	out := fmt.Sprintf("%s seconds\n", color.FgGreen(fmt.Sprintf("%.2f", elapsed)))
+	_, err := fmt.Fprint(t.stdout, out)
 	if err != nil {
-		return
+		return 0
 	}
+	return strings.Count(out, "\n")
 }

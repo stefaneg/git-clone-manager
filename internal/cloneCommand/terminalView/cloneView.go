@@ -3,25 +3,29 @@ package terminalView
 import (
 	"context"
 	"fmt"
+	"gcm/internal/color"
+	"gcm/internal/counter"
 	"io"
+	"strings"
 	"time"
-	"tools/internal/color"
-	"tools/internal/counter"
-	"tools/internal/view"
 )
 
 type CloneViewModel struct {
+	CloneRoot            string
+	RemoteHostName       string
 	GroupCount           *counter.Counter
-	ProjectCount         *counter.Counter
+	GroupProjectCount    *counter.Counter
+	DirectProjectCount   *counter.Counter
 	CloneCount           *counter.Counter
-	ClonedNowCount       *counter.Counter
 	ArchivedCloneCounter *counter.Counter
 }
 
-func NewCloneViewModel() *CloneViewModel {
+func NewCloneViewModel(remoteHostName string, cloneRoot string) *CloneViewModel {
 	return &CloneViewModel{
-		ClonedNowCount:       counter.NewCounter(),
-		ProjectCount:         counter.NewCounter(),
+		CloneRoot:            cloneRoot,
+		RemoteHostName:       remoteHostName,
+		GroupProjectCount:    counter.NewCounter(),
+		DirectProjectCount:   counter.NewCounter(),
 		CloneCount:           counter.NewCounter(),
 		GroupCount:           counter.NewCounter(),
 		ArchivedCloneCounter: counter.NewCounter(),
@@ -30,50 +34,53 @@ func NewCloneViewModel() *CloneViewModel {
 
 // CloneView handles rendering counters in different modes
 type CloneView struct {
-	viewModel       *CloneViewModel
-	isTTY           bool
-	stdout          io.Writer
-	timeElapsedView view.View
+	viewModel *CloneViewModel
+	isTTY     bool
+	stdout    io.Writer
 }
 
-func NewCloneView(store *CloneViewModel, isTTY bool, stdout io.Writer, timeElapsedView view.View) *CloneView {
+func NewCloneView(store *CloneViewModel, isTTY bool, stdout io.Writer) *CloneView {
 	return &CloneView{
-		viewModel:       store,
-		isTTY:           isTTY,
-		stdout:          stdout,
-		timeElapsedView: timeElapsedView,
+		viewModel: store,
+		isTTY:     isTTY,
+		stdout:    stdout,
 	}
 }
 
 func (r *CloneView) StartTTYRenderLoop(ctx context.Context) {
 	// Initial placeholder rendering to create space for counters
-	r.render()
+	lineCount := r.Render()
 
 	for {
 		select {
 		case <-ctx.Done():
-			return // Exit the render loop when the context is canceled
+			return // Exit the Render loop when the context is canceled
 		default:
-			_, err := fmt.Fprintf(r.stdout, "\033[%dA", 4)
+			_, err := fmt.Fprintf(r.stdout, "\033[%dA", lineCount)
 			if err != nil {
 				return
 			}
-			r.render()
+			r.Render()
 			time.Sleep(100 * time.Millisecond) // Refresh rate
 		}
 	}
 }
-func (r *CloneView) render() {
-	_, err := fmt.Fprintf(r.stdout, "%s projects in %s groups\n%s git clones (%s archived) \n%s cloned now\n",
-		color.FgMagenta(fmt.Sprintf("%d", r.viewModel.ProjectCount.Count())),
+
+func (r *CloneView) Render() int {
+	out := fmt.Sprintf("%s\n  <- %s:\n    %s projects in %s groups\n    %s direct projects\n    %s git clones (%s archived)\n",
+		color.FgCyan(r.viewModel.CloneRoot),
+		color.FgCyan(r.viewModel.RemoteHostName),
+		color.FgMagenta(fmt.Sprintf("%d", r.viewModel.GroupProjectCount.Count())),
 		color.FgMagenta(fmt.Sprintf("%d", r.viewModel.GroupCount.Count())),
+		color.FgMagenta(fmt.Sprintf("%d", r.viewModel.DirectProjectCount.Count())),
 		color.FgMagenta(fmt.Sprintf("%d", r.viewModel.CloneCount.Count())),
 		color.FgMagenta(fmt.Sprintf("%d", r.viewModel.ArchivedCloneCounter.Count())),
-		color.FgMagenta(fmt.Sprintf("%d", r.viewModel.ClonedNowCount.Count())))
+	)
+	_, err := fmt.Fprint(r.stdout, out)
 	if err != nil {
-		return
+		return 0
 	}
-	r.timeElapsedView.Render()
+	return strings.Count(out, "\n")
 }
 
 func (r *CloneView) RenderNonTTY() {
@@ -81,5 +88,5 @@ func (r *CloneView) RenderNonTTY() {
 	if err != nil {
 		return
 	}
-	r.render()
+	r.Render()
 }

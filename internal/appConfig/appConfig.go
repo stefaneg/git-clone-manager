@@ -1,6 +1,6 @@
 package appConfig
 
-import "tools/internal/gitlab"
+import "gcm/internal/gitlab"
 
 const DefaultChannelBufferLength = 10
 

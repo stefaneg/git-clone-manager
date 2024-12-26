@@ -3,12 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	"gcm/internal/appConfig"
+	"gcm/internal/cloneCommand"
+	. "gcm/internal/log"
+	typex "gcm/type"
 	"os"
 	"path/filepath"
-	"tools/internal/appConfig"
-	"tools/internal/cloneCommand"
-	. "tools/internal/log"
-	typex "tools/type"
 
 	"gopkg.in/yaml.v2"
 )

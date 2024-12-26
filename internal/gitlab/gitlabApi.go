@@ -3,9 +3,9 @@ package gitlab
 import (
 	"encoding/json"
 	"fmt"
+	"gcm/internal/log"
 	"io"
 	"net/http"
-	"tools/internal/log"
 )
 
 type Group struct {

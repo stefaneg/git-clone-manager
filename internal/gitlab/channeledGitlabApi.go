@@ -2,12 +2,12 @@ package gitlab
 
 import (
 	"fmt"
+	"gcm/internal/color"
+	"gcm/internal/counter"
+	"gcm/internal/gitrepo"
+	. "gcm/internal/log"
 	"github.com/samber/lo"
 	"sync"
-	"tools/internal/color"
-	"tools/internal/counter"
-	"tools/internal/gitrepo"
-	. "tools/internal/log"
 )
 
 const GroupChannelBufferSize = 20
@@ -155,11 +155,12 @@ func ConvertProjectsToRepos(gitlabProjectChannel <-chan Project) chan *gitrepo.R
 	return gitRepoChannel
 }
 
-func (channeledApi *ChanneledApi) ScheduleRemoteProjects() chan *gitrepo.Repository {
+func (channeledApi *ChanneledApi) ScheduleDirectProjects(projectCounter *counter.Counter) chan *gitrepo.Repository {
 	repoChannel := make(chan *gitrepo.Repository, GroupChannelBufferSize)
 	go func() {
 		for _, prj := range channeledApi.config.Projects {
 			repo := gitrepo.CreateFromGitRemoteConfig(prj, channeledApi.config.HostName, channeledApi.config.CloneDirectory)
+			projectCounter.Add(1)
 			repoChannel <- repo
 		}
 

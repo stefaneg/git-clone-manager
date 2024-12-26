@@ -2,13 +2,13 @@ package gitrepo
 
 import (
 	"fmt"
+	"gcm/internal/color"
+	"gcm/internal/gitremote"
+	. "gcm/internal/log"
+	"gcm/internal/sh"
 	"github.com/sirupsen/logrus"
 	"os"
 	"path"
-	"tools/internal/color"
-	"tools/internal/gitremote"
-	. "tools/internal/log"
-	"tools/internal/sh"
 )
 
 type Repository struct {

@@ -2,37 +2,35 @@ package cloneCommand
 
 import (
 	"context"
+	"gcm/internal/appConfig"
+	"gcm/internal/channel"
+	"gcm/internal/cloneCommand/terminalView"
+	"gcm/internal/color"
+	"gcm/internal/gitlab"
+	"gcm/internal/gitrepo"
+	"gcm/internal/log"
+	"gcm/internal/view"
 	"github.com/samber/lo"
 	"golang.org/x/term"
 	"os"
+	"path/filepath"
 	"time"
-	"tools/internal/appConfig"
-	"tools/internal/channel"
-	"tools/internal/cloneCommand/terminalView"
-	"tools/internal/color"
-	"tools/internal/gitlab"
-	"tools/internal/gitrepo"
-	"tools/internal/log"
-	"tools/internal/view"
 )
 
 func ExecuteCloneCommand(config *appConfig.AppConfig) {
 
 	startTime := time.Now()
+	timeElapsedView := view.NewTimeElapsedView(startTime, os.Stdout, time.Since)
 
-	cloneViewModel := terminalView.NewCloneViewModel()
 	// Check if output is a TTY
 	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
 
-	timeElapsedView := view.NewTimeElapsedView(startTime, os.Stdout, time.Since)
-	r := terminalView.NewCloneView(cloneViewModel, isTTY, os.Stdout, timeElapsedView)
-	ctx, stopRenderLoop := context.WithCancel(context.Background())
-	if isTTY {
-		go r.StartTTYRenderLoop(ctx)
-	}
+	var cloneViewModels []view.View
 
 	var cloneChannelsRateLimited []<-chan *gitrepo.Repository
 	for _, gitLabConfig := range config.GitLab {
+		absPath, _ := filepath.Abs(gitLabConfig.CloneDirectory)
+		cloneViewModel := terminalView.NewCloneViewModel(gitLabConfig.HostName, absPath)
 
 		token := gitLabConfig.RetrieveTokenFromEnv()
 		if token == "" {
@@ -48,8 +46,8 @@ func ExecuteCloneCommand(config *appConfig.AppConfig) {
 		}
 
 		labApi := gitlab.NewAPIClient(token, gitLabConfig.HostName)
-		channeledApi := gitlab.NewChanneledApi(labApi, &gitLabConfig, cloneViewModel.ProjectCount, cloneViewModel.GroupCount)
-		remoteRepoChannel := channeledApi.ScheduleRemoteProjects()
+		channeledApi := gitlab.NewChanneledApi(labApi, &gitLabConfig, cloneViewModel.GroupProjectCount, cloneViewModel.GroupCount)
+		remoteRepoChannel := channeledApi.ScheduleDirectProjects(cloneViewModel.DirectProjectCount)
 
 		gitlabGroupProjectsChannel := channeledApi.ScheduleGitlabGroupProjectsFetch(gitLabConfig.Groups)
 		reposChannel := gitlab.ConvertProjectsToRepos(gitlabGroupProjectsChannel)
@@ -60,11 +58,25 @@ func ExecuteCloneCommand(config *appConfig.AppConfig) {
 		var cloneChannelRateLimited = channel.RateLimit[*gitrepo.Repository](gitrepo.FilterCloneNeeded(in, cloneViewModel.ArchivedCloneCounter, cloneViewModel.CloneCount), gitLabConfig.GetConfiguredCloneRate(), 10)
 
 		cloneChannelsRateLimited = append(cloneChannelsRateLimited, cloneChannelRateLimited)
+		cloneView := terminalView.NewCloneView(cloneViewModel, isTTY, os.Stdout)
+		cloneViewModels = append(cloneViewModels, cloneView)
+
 	}
-	gitrepo.CloneRepositories(lo.FanIn(appConfig.DefaultChannelBufferLength, cloneChannelsRateLimited...), cloneViewModel.ClonedNowCount)
+
+	cnvm := terminalView.NewClonedNowViewModel()
+	cnv := terminalView.NewClonedNowView(cnvm, os.Stdout)
+	cloneViewModels = append(cloneViewModels, cnv, timeElapsedView)
+
+	compositeView := view.NewCompositeView(cloneViewModels)
+	ctx, stopRenderLoop := context.WithCancel(context.Background())
+	if isTTY {
+		go view.StartTTYRenderLoop(compositeView, os.Stdout, ctx)
+	}
+	gitrepo.CloneRepositories(lo.FanIn(appConfig.DefaultChannelBufferLength, cloneChannelsRateLimited...), cnvm.ClonedNowCount)
+
 	stopRenderLoop()
 
 	if !isTTY {
-		r.RenderNonTTY()
+		compositeView.Render()
 	}
 }

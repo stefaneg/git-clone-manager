@@ -1,10 +1,10 @@
 package gitrepo
 
 import (
+	"gcm/internal/color"
+	"gcm/internal/counter"
+	"gcm/internal/log"
 	"sync"
-	"tools/internal/color"
-	"tools/internal/counter"
-	"tools/internal/log"
 )
 
 func CloneRepositories(repositories <-chan *Repository, cloneCounter *counter.Counter) {
