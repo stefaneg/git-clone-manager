@@ -2,7 +2,6 @@ package gitlab
 
 import (
 	"fmt"
-	"gcm/internal/color"
 	"gcm/internal/counter"
 	"gcm/internal/gitrepo"
 	. "gcm/internal/log"
@@ -120,7 +119,7 @@ func (channeledApi *ChanneledApi) FetchAndChannelGroupProjects(rootGroupConfig *
 		close(gitlabProjectChannel)
 	}()
 
-	Log.Debugf("All projects fetched for group ... %s", color.FgGreen(rootGroupConfig.Name))
+	Log.Debugf("All projects fetched for group ... %s", rootGroupConfig.Name)
 	return gitlabProjectChannel
 }
 

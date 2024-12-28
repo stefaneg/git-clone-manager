@@ -22,7 +22,7 @@ func NewFakeView(stdout io.Writer, output string) view.View {
 	}
 }
 
-func (m *FakeView) Render() int {
+func (m *FakeView) Render(int) int {
 	var lines int
 	_, err := fmt.Fprint(m.stdout, m.Output)
 	if err != nil {
@@ -49,10 +49,10 @@ func TestCloneView_Render(t *testing.T) {
 	cloneView := NewCloneView(viewModel, false, &buf)
 
 	// Call RenderNonTTY
-	lineCount := cloneView.Render()
+	lineCount := cloneView.Render(11)
 
 	// Expected output
-	expected := fmt.Sprintf("localtest\n  <- testing.123:\n    %s projects in %s groups\n    %s direct projects\n    %s git clones (%s archived)\n",
+	expected := fmt.Sprintf("localtest  \n  <- testi:\n    %s projects in %s groups\n    %s direct projects\n    %s git clones (%s archived)\n",
 		color.FgMagenta("20"),
 		color.FgMagenta("10"),
 		color.FgMagenta("1"),

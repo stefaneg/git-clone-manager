@@ -9,12 +9,14 @@ import (
 )
 
 type ClonedNowViewModel struct {
-	ClonedNowCount *counter.Counter
+	ClonedNowCount  *counter.Counter
+	CloneErrorCount *counter.Counter
 }
 
 func NewClonedNowViewModel() *ClonedNowViewModel {
 	return &ClonedNowViewModel{
-		ClonedNowCount: counter.NewCounter(),
+		ClonedNowCount:  counter.NewCounter(),
+		CloneErrorCount: counter.NewCounter(),
 	}
 }
 
@@ -30,8 +32,11 @@ func NewClonedNowView(vm *ClonedNowViewModel, stdout io.Writer) *ClonedNowView {
 	}
 }
 
-func (v ClonedNowView) Render() int {
+func (v ClonedNowView) Render(int) int {
 	out := fmt.Sprintf("%s cloned now\n", color.FgMagenta(fmt.Sprintf("%d", v.viewModel.ClonedNowCount.Count())))
+	if v.viewModel.CloneErrorCount.Count() > 0 {
+		out = fmt.Sprintf("%s - %s errors cloning. See log file...\n", out, color.FgRed(fmt.Sprintf("%d", v.viewModel.CloneErrorCount.Count())))
+	}
 	_, err := fmt.Fprint(v.stdout, out)
 	if err != nil {
 		return 0

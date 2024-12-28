@@ -22,12 +22,12 @@ func NewTimeElapsedView(startTime time.Time, stdout io.Writer, since func(time.T
 	}
 }
 
-func (t *TimeElapsedView) Render() int {
+func (t *TimeElapsedView) Render(int) int {
 	elapsed := t.since(t.startTime).Seconds()
 	out := fmt.Sprintf("%s seconds\n", color.FgGreen(fmt.Sprintf("%.2f", elapsed)))
 	_, err := fmt.Fprint(t.stdout, out)
 	if err != nil {
-		return 0
+		panic(err)
 	}
 	return strings.Count(out, "\n")
 }

@@ -5,7 +5,6 @@ import (
 	"gcm/internal/appConfig"
 	"gcm/internal/channel"
 	"gcm/internal/cloneCommand/terminalView"
-	"gcm/internal/color"
 	"gcm/internal/gitlab"
 	"gcm/internal/gitrepo"
 	"gcm/internal/log"
@@ -34,7 +33,7 @@ func ExecuteCloneCommand(config *appConfig.AppConfig) {
 
 		token := gitLabConfig.RetrieveTokenFromEnv()
 		if token == "" {
-			logger.Log.Printf("Gitlab token env variable %s not set for %s; skipping", color.FgRed(gitLabConfig.EnvTokenVariableName), color.FgCyan(gitLabConfig.HostName))
+			logger.Log.Printf("Gitlab token env variable %s not set for %s; skipping", gitLabConfig.EnvTokenVariableName, gitLabConfig.HostName)
 			continue
 		}
 
@@ -62,21 +61,24 @@ func ExecuteCloneCommand(config *appConfig.AppConfig) {
 		cloneViewModels = append(cloneViewModels, cloneView)
 
 	}
-
+	logFilePath, _ := filepath.Abs("gcm.log")
+	errvm := terminalView.NewErrorViewModel(logFilePath)
+	errview := terminalView.NewErrorView(errvm, os.Stdout)
 	cnvm := terminalView.NewClonedNowViewModel()
 	cnv := terminalView.NewClonedNowView(cnvm, os.Stdout)
-	cloneViewModels = append(cloneViewModels, cnv, timeElapsedView)
+	cloneViewModels = append(cloneViewModels, cnv, timeElapsedView, errview)
+	//... plug in error view, direct errors through channel to it
 
 	compositeView := view.NewCompositeView(cloneViewModels)
 	ctx, stopRenderLoop := context.WithCancel(context.Background())
 	if isTTY {
 		go view.StartTTYRenderLoop(compositeView, os.Stdout, ctx)
 	}
-	gitrepo.CloneRepositories(lo.FanIn(appConfig.DefaultChannelBufferLength, cloneChannelsRateLimited...), cnvm.ClonedNowCount)
+	gitrepo.CloneRepositories(lo.FanIn(appConfig.DefaultChannelBufferLength, cloneChannelsRateLimited...), cnvm.ClonedNowCount, errvm.ErrorChannel)
 
 	stopRenderLoop()
 
 	if !isTTY {
-		compositeView.Render()
+		compositeView.Render(0)
 	}
 }

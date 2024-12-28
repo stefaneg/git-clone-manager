@@ -1,26 +1,24 @@
 package logger
 
 import (
-	"fmt"
 	"github.com/sirupsen/logrus"
+	"os"
 )
 
 var Log = logrus.New()
 
-type CustomFormatter struct {
-	logrus.TextFormatter
-}
-
-func (f *CustomFormatter) Format(entry *logrus.Entry) ([]byte, error) {
-	if entry.Level == logrus.InfoLevel {
-		entry.Message = fmt.Sprintf("%s\n", entry.Message)
-		return []byte(entry.Message), nil
-	}
-	return f.TextFormatter.Format(entry)
-}
-
 func InitLogger(verbose bool) {
-	Log.SetFormatter(&CustomFormatter{logrus.TextFormatter{}})
+
+	// Create a log file
+	file, err := os.OpenFile("gcm.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		logrus.Fatalf("Failed to open log file: %v", err)
+	}
+
+	// Set the output of the logger to the file
+	Log.SetOutput(file)
+
+	Log.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 	if verbose {
 		Log.SetLevel(logrus.DebugLevel)
 		Log.Debugln("Verbose (debug) logging enabled")

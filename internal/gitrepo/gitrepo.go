@@ -2,7 +2,6 @@ package gitrepo
 
 import (
 	"fmt"
-	"gcm/internal/color"
 	"gcm/internal/gitremote"
 	. "gcm/internal/log"
 	"gcm/internal/sh"
@@ -32,16 +31,16 @@ func (repo *Repository) Clone() error {
 	}
 
 	projectPath := repo.getWorkingCopyPath(repo.CloneOptions.CloneRootDirectory())
-	Log.Infof("Cloning %s to %s", color.FgMagenta(repo.Name), color.FgMagenta(projectPath))
+	Log.Infof("Cloning %s to %s", repo.Name, projectPath)
 	err := os.MkdirAll(projectPath, os.ModePerm)
 	if err != nil {
-		return fmt.Errorf("failed to create directory %s: %v", color.FgRed(projectPath), err)
+		return fmt.Errorf("failed to create directory %s: %v", projectPath, err)
 	}
 	cloneCmd := fmt.Sprintf("git clone %s .", repo.SSHURLToRepo)
 	_, err = sh.ExecuteShellCommand(sh.DirectoryPath(projectPath), sh.ShellCommand(cloneCmd))
 
 	if err != nil {
-		return fmt.Errorf("in %s, %s failed: %s", color.FgRed(projectPath), cloneCmd, err)
+		return fmt.Errorf("in %s, %s failed: %s", projectPath, cloneCmd, err)
 	}
 
 	if repo.Archived {
@@ -109,7 +108,7 @@ func (repo *Repository) WriteArchivedMarker(projectPath string) error {
 		return fmt.Errorf("failed to write to marker file: %w", err)
 	}
 	if Log.GetLevel() >= logrus.DebugLevel {
-		Log.Debugf("ARCHIVED.txt marker file created at %s\n", color.FgCyan(markerFilePath))
+		Log.Debugf("ARCHIVED.txt marker file created at %s\n", markerFilePath)
 	}
 	return nil
 }

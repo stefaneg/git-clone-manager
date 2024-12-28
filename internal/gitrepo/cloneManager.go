@@ -1,27 +1,28 @@
 package gitrepo
 
 import (
-	"gcm/internal/color"
 	"gcm/internal/counter"
 	"gcm/internal/log"
 	"sync"
 )
 
-func CloneRepositories(repositories <-chan *Repository, cloneCounter *counter.Counter) {
+func CloneRepositories(repositories <-chan *Repository, cloneCounter *counter.Counter, errorChannel chan error) {
 	cloneWaitGroup := sync.WaitGroup{}
 	for {
 		receivedRepo, ok := <-repositories
 		if !ok {
 			break
 		}
-		cloneCounter.Add(1)
 		cloneWaitGroup.Add(1)
 		go func() {
 			defer cloneWaitGroup.Done()
 			err := receivedRepo.Clone()
 			if err != nil {
-				logger.Log.Errorf("Failed to clone project %s: %v", color.FgRed(receivedRepo.Name), err)
+				logger.Log.Errorf("Failed to clone project %s: %v", receivedRepo.Name, err)
+				errorChannel <- err
+				return
 			}
+			cloneCounter.Add(1)
 		}()
 	}
 	cloneWaitGroup.Wait()
