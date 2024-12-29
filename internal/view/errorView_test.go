@@ -1,4 +1,4 @@
-package terminalView
+package view
 
 import (
 	"bytes"

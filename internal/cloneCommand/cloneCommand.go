@@ -62,8 +62,8 @@ func ExecuteCloneCommand(config *appConfig.AppConfig) {
 
 	}
 	logFilePath, _ := filepath.Abs("gcm.log")
-	errvm := terminalView.NewErrorViewModel(logFilePath)
-	errview := terminalView.NewErrorView(errvm, os.Stdout)
+	errvm := view.NewErrorViewModel(logFilePath)
+	errview := view.NewErrorView(errvm, os.Stdout)
 	cnvm := terminalView.NewClonedNowViewModel()
 	cnv := terminalView.NewClonedNowView(cnvm, os.Stdout)
 	cloneViewModels = append(cloneViewModels, cnv, timeElapsedView, errview)

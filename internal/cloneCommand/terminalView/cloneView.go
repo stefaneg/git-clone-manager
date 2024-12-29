@@ -5,6 +5,7 @@ import (
 	"gcm/internal/color"
 	"gcm/internal/counter"
 	"gcm/internal/ext"
+	"gcm/internal/view"
 	"io"
 	"strings"
 )
@@ -48,8 +49,8 @@ func NewCloneView(store *CloneViewModel, isTTY bool, stdout io.Writer) *CloneVie
 
 func (r *CloneView) Render(width int) int {
 	out := fmt.Sprintf("%s\n  <- %s:\n    %s projects in %s groups\n    %s direct projects\n    %s git clones (%s archived)\n",
-		color.FgCyan(FitOutputToWidthUsingCut(width, ReplaceHomeDirWithTilde(r.viewModel.CloneRoot))),
-		color.FgCyan(FitOutputToWidth(ext.Max(width-6, 1), r.viewModel.RemoteHostName)),
+		color.FgCyan(view.TruncateTextToWidth(width, ext.ReplaceHomeDirWithTilde(r.viewModel.CloneRoot))),
+		color.FgCyan(view.TrimTextToWidth(ext.Max(width-6, 1), r.viewModel.RemoteHostName)),
 		color.FgMagenta(fmt.Sprintf("%d", r.viewModel.GroupProjectCount.Count())),
 		color.FgMagenta(fmt.Sprintf("%d", r.viewModel.GroupCount.Count())),
 		color.FgMagenta(fmt.Sprintf("%d", r.viewModel.DirectProjectCount.Count())),
