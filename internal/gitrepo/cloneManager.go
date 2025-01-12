@@ -1,6 +1,7 @@
 package gitrepo
 
 import (
+	"fmt"
 	"gcm/internal/counter"
 	"gcm/internal/log"
 	"sync"
@@ -18,8 +19,7 @@ func CloneRepositories(repositories <-chan *Repository, cloneCounter *counter.Co
 			defer cloneWaitGroup.Done()
 			err := receivedRepo.Clone()
 			if err != nil {
-				logger.Log.Errorf("Failed to clone project %s: %v", receivedRepo.Name, err)
-				errorChannel <- err
+				errorChannel <- fmt.Errorf("failed to clone project %s: %v", receivedRepo.Name, err)
 				return
 			}
 			cloneCounter.Add(1)

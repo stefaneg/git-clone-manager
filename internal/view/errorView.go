@@ -5,6 +5,7 @@ import (
 	"gcm/internal/color"
 	"gcm/internal/counter"
 	"gcm/internal/ext"
+	logger "gcm/internal/log"
 	"io"
 	"strings"
 )
@@ -26,6 +27,7 @@ func NewErrorViewModel(logFilePath string) *ErrorViewModel {
 		for err := range viewModel.ErrorChannel {
 			viewModel.errorCount.Add(1)
 			viewModel.latestError = err.Error()
+			logger.Log.Errorf("%v", err)
 		}
 	}()
 	return &viewModel
@@ -45,9 +47,11 @@ func NewErrorView(vm *ErrorViewModel, stdout io.Writer) *ErrorView {
 
 func (v ErrorView) Render(int) int {
 	if v.viewModel.errorCount.Count() > 0 {
-		out := fmt.Sprintf(("--- %s errors ---\nSee log file:\n%s\n"),
+		out := fmt.Sprintf(
+			("--- %s errors ---\nSee log file:\n%s\n"),
 			color.FgRed(fmt.Sprintf("%d", v.viewModel.errorCount.Count())),
-			color.FgMagenta(ext.ReplaceHomeDirWithTilde(v.viewModel.logFilePath)))
+			color.FgMagenta(ext.ReplaceHomeDirWithTilde(v.viewModel.logFilePath)),
+		)
 
 		_, err := fmt.Fprint(v.stdout, out)
 		if err != nil {

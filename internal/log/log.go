@@ -3,14 +3,17 @@ package logger
 import (
 	"github.com/sirupsen/logrus"
 	"os"
+	"path/filepath"
 )
+
+const LogFileName = "gcm.log"
 
 var Log = logrus.New()
 
 func InitLogger(verbose bool) {
 
 	// Create a log file
-	file, err := os.OpenFile("gcm.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	file, err := os.OpenFile(GetLogFilePath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		logrus.Fatalf("Failed to open log file: %v", err)
 	}
@@ -25,4 +28,12 @@ func InitLogger(verbose bool) {
 	} else {
 		Log.SetLevel(logrus.InfoLevel)
 	}
+}
+
+func GetLogFilePath() string {
+	path, err := filepath.Abs(LogFileName)
+	if err != nil {
+		return LogFileName
+	}
+	return path
 }

@@ -9,15 +9,18 @@ import (
 	"time"
 )
 
-func StartTTYRenderLoop(r View, out io.Writer, ctx context.Context) {
-	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+func StartTTYRenderLoop(r View, out io.Writer, ctx context.Context, file *os.File) {
+	if !term.IsTerminal(int(file.Fd())) {
+		panic(fmt.Errorf("cannot start a TTY render loop on a non-terminal file"))
+	}
+	width, _, err := term.GetSize(int(file.Fd()))
 	if err != nil {
 		panic(err)
 	}
 	lineCount := r.Render(width)
 
 	for {
-		width, _, err := term.GetSize(int(os.Stdout.Fd()))
+		width, _, err := term.GetSize(int(file.Fd()))
 		if err != nil {
 			panic(err)
 		}

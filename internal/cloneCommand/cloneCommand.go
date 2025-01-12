@@ -1,43 +1,43 @@
 package cloneCommand
 
 import (
-	"context"
+	"fmt"
 	"gcm/internal/appConfig"
 	"gcm/internal/channel"
 	"gcm/internal/cloneCommand/terminalView"
 	"gcm/internal/gitlab"
 	"gcm/internal/gitrepo"
-	"gcm/internal/log"
-	"gcm/internal/view"
+	logger "gcm/internal/log"
 	"github.com/samber/lo"
-	"golang.org/x/term"
 	"os"
 	"path/filepath"
-	"time"
 )
 
-func ExecuteCloneCommand(config *appConfig.AppConfig) {
+type CloneCommandView struct {
+}
 
-	startTime := time.Now()
-	timeElapsedView := view.NewTimeElapsedView(startTime, os.Stdout, time.Since)
-
-	// Check if output is a TTY
-	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
-
-	var cloneViewModels []view.View
+func ExecuteCloneCommand(
+	config *appConfig.AppConfig,
+	cloneView *terminalView.GitLabCloneView,
+	clonedNowViewModel *terminalView.ClonedNowViewModel,
+	errorChannel chan error,
+) {
 
 	var cloneChannelsRateLimited []<-chan *gitrepo.Repository
 	for _, gitLabConfig := range config.GitLab {
 		absPath, _ := filepath.Abs(gitLabConfig.CloneDirectory)
-		cloneViewModel := terminalView.NewCloneViewModel(gitLabConfig.HostName, absPath)
+		cloneViewModel := terminalView.NewGitLabCloneViewModel(gitLabConfig.HostName, absPath)
+		cloneView.AddViewModel(cloneViewModel)
 
 		token := gitLabConfig.RetrieveTokenFromEnv()
 		if token == "" {
-			logger.Log.Printf("Gitlab token env variable %s not set for %s; skipping", gitLabConfig.EnvTokenVariableName, gitLabConfig.HostName)
+			errorChannel <- fmt.Errorf(
+				"Gitlab token env variable %s not set for %s; skipping",
+				gitLabConfig.EnvTokenVariableName,
+				gitLabConfig.HostName,
+			)
 			continue
 		}
-
-		// logger.Log.Infof("Cloning %s groups & %s projects from %s into %s", color.FgMagenta(fmt.Sprintf("%d", len(gitLabConfig.Groups))), color.FgMagenta(fmt.Sprintf("%d", len(gitLabConfig.Projects))), color.FgCyan(gitLabConfig.HostName), color.FgCyan(gitLabConfig.CloneDirectory))
 
 		err := os.MkdirAll(gitLabConfig.CloneDirectory, os.ModePerm)
 		if err != nil {
@@ -45,7 +45,9 @@ func ExecuteCloneCommand(config *appConfig.AppConfig) {
 		}
 
 		labApi := gitlab.NewAPIClient(token, gitLabConfig.HostName)
-		channeledApi := gitlab.NewChanneledApi(labApi, &gitLabConfig, cloneViewModel.GroupProjectCount, cloneViewModel.GroupCount)
+		channeledApi := gitlab.NewChanneledApi(
+			labApi, &gitLabConfig, cloneViewModel.GroupProjectCount, cloneViewModel.GroupCount,
+		)
 		remoteRepoChannel := channeledApi.ScheduleDirectProjects(cloneViewModel.DirectProjectCount)
 
 		gitlabGroupProjectsChannel := channeledApi.ScheduleGitlabGroupProjectsFetch(gitLabConfig.Groups)
@@ -54,31 +56,17 @@ func ExecuteCloneCommand(config *appConfig.AppConfig) {
 		var potentialClonesChannel []<-chan *gitrepo.Repository
 		potentialClonesChannel = append(potentialClonesChannel, reposChannel, remoteRepoChannel)
 		in := lo.FanIn(appConfig.DefaultChannelBufferLength, potentialClonesChannel...)
-		var cloneChannelRateLimited = channel.RateLimit[*gitrepo.Repository](gitrepo.FilterCloneNeeded(in, cloneViewModel.ArchivedCloneCounter, cloneViewModel.CloneCount), gitLabConfig.GetConfiguredCloneRate(), 10)
+		var cloneChannelRateLimited = channel.RateLimit[*gitrepo.Repository](
+			gitrepo.FilterCloneNeeded(
+				in, cloneViewModel.ArchivedCloneCounter, cloneViewModel.CloneCount,
+			), gitLabConfig.GetConfiguredCloneRate(), appConfig.DefaultChannelBufferLength,
+		)
 
 		cloneChannelsRateLimited = append(cloneChannelsRateLimited, cloneChannelRateLimited)
-		cloneView := terminalView.NewCloneView(cloneViewModel, isTTY, os.Stdout)
-		cloneViewModels = append(cloneViewModels, cloneView)
-
 	}
-	logFilePath, _ := filepath.Abs("gcm.log")
-	errvm := view.NewErrorViewModel(logFilePath)
-	errview := view.NewErrorView(errvm, os.Stdout)
-	cnvm := terminalView.NewClonedNowViewModel()
-	cnv := terminalView.NewClonedNowView(cnvm, os.Stdout)
-	cloneViewModels = append(cloneViewModels, cnv, timeElapsedView, errview)
-	//... plug in error view, direct errors through channel to it
 
-	compositeView := view.NewCompositeView(cloneViewModels)
-	ctx, stopRenderLoop := context.WithCancel(context.Background())
-	if isTTY {
-		go view.StartTTYRenderLoop(compositeView, os.Stdout, ctx)
-	}
-	gitrepo.CloneRepositories(lo.FanIn(appConfig.DefaultChannelBufferLength, cloneChannelsRateLimited...), cnvm.ClonedNowCount, errvm.ErrorChannel)
-
-	stopRenderLoop()
-
-	if !isTTY {
-		compositeView.Render(0)
-	}
+	gitrepo.CloneRepositories(
+		lo.FanIn(appConfig.DefaultChannelBufferLength, cloneChannelsRateLimited...), clonedNowViewModel.ClonedNowCount,
+		errorChannel,
+	)
 }
