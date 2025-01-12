@@ -23,9 +23,11 @@ func TestCloneView_Render(t *testing.T) {
 	addSomeFakeCounts(viewModel)
 
 	var buf bytes.Buffer
-	cloneView := NewGitLabCloneView(&buf)
-	cloneView.AddViewModel(viewModel)
-
+	cloneView := NewGitLabCloneView(
+		&buf, func() []*GitLabCloneViewModel {
+			return []*GitLabCloneViewModel{viewModel}
+		},
+	)
 	// Call RenderNonTTY
 	lineCount := cloneView.Render(11)
 

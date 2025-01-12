@@ -11,11 +11,9 @@ import (
 	"gcm/internal/view"
 	typex "gcm/type"
 	"golang.org/x/term"
+	"gopkg.in/yaml.v2"
 	"os"
 	"path/filepath"
-	"time"
-
-	"gopkg.in/yaml.v2"
 )
 
 func main() {
@@ -39,32 +37,21 @@ func main() {
 	}
 	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
 
-	compositeView := view.NewCompositeView(make([]view.View, 0))
-	startTime := time.Now()
+	cloneCommandViewModel := terminalView.NewCloneCommandViewModel()
 
-	out := os.Stdout
-	errorViewModel := view.NewErrorViewModel(GetLogFilePath())
-	compositeView.AddFooter(view.NewErrorView(errorViewModel, out))
-
-	clonedNowViewModel := terminalView.NewClonedNowViewModel()
-	compositeView.AddFooter(terminalView.NewClonedNowView(clonedNowViewModel, out))
-
-	compositeView.AddFooter(view.NewTimeElapsedView(startTime, out, time.Since))
+	cloneView := terminalView.NewCloneCommandView(cloneCommandViewModel)
 
 	ctx, stopRenderLoop := context.WithCancel(context.Background())
 	if isTTY {
-		go view.StartTTYRenderLoop(compositeView, out, ctx, os.Stdout)
+		go view.StartTTYRenderLoop(cloneView, os.Stdout, ctx, os.Stdout)
 	}
 
-	cloneView := terminalView.NewGitLabCloneView(out)
-	compositeView.AddView(cloneView)
-
-	cloneCommand.ExecuteCloneCommand(config, cloneView, clonedNowViewModel, errorViewModel.ErrorChannel)
+	cloneCommand.ExecuteCloneCommand(config, cloneCommandViewModel.ErrorViewModel.ErrorChannel, cloneCommandViewModel)
 
 	stopRenderLoop()
 
 	if !isTTY {
-		compositeView.Render(0)
+		cloneView.Render(0)
 	}
 
 }

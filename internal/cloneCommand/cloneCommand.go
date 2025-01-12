@@ -18,17 +18,15 @@ type CloneCommandView struct {
 
 func ExecuteCloneCommand(
 	config *appConfig.AppConfig,
-	cloneView *terminalView.GitLabCloneView,
-	clonedNowViewModel *terminalView.ClonedNowViewModel,
 	errorChannel chan error,
+	vm *terminalView.CloneCommandViewModel,
 ) {
 
 	var cloneChannelsRateLimited []<-chan *gitrepo.Repository
 	for _, gitLabConfig := range config.GitLab {
 		absPath, _ := filepath.Abs(gitLabConfig.CloneDirectory)
 		cloneViewModel := terminalView.NewGitLabCloneViewModel(gitLabConfig.HostName, absPath)
-		cloneView.AddViewModel(cloneViewModel)
-
+		vm.AddGitLabCloneVM(cloneViewModel)
 		token := gitLabConfig.RetrieveTokenFromEnv()
 		if token == "" {
 			errorChannel <- fmt.Errorf(
@@ -66,7 +64,8 @@ func ExecuteCloneCommand(
 	}
 
 	gitrepo.CloneRepositories(
-		lo.FanIn(appConfig.DefaultChannelBufferLength, cloneChannelsRateLimited...), clonedNowViewModel.ClonedNowCount,
+		lo.FanIn(appConfig.DefaultChannelBufferLength, cloneChannelsRateLimited...),
+		vm.ClonedNowViewModel.ClonedNowCount,
 		errorChannel,
 	)
 }

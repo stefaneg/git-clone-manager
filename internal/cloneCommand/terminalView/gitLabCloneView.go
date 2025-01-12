@@ -34,24 +34,20 @@ func NewGitLabCloneViewModel(remoteHostName string, cloneRoot string) *GitLabClo
 
 // GitLabCloneView handles rendering counters in different modes
 type GitLabCloneView struct {
-	viewModels []*GitLabCloneViewModel
-	stdout     io.Writer
+	viewModelsProvider func() []*GitLabCloneViewModel
+	stdout             io.Writer
 }
 
-func NewGitLabCloneView(stdout io.Writer) *GitLabCloneView {
+func NewGitLabCloneView(stdout io.Writer, viewModelsProvider func() []*GitLabCloneViewModel) *GitLabCloneView {
 	return &GitLabCloneView{
-		viewModels: []*GitLabCloneViewModel{},
-		stdout:     stdout,
+		viewModelsProvider: viewModelsProvider,
+		stdout:             stdout,
 	}
-}
-
-func (r *GitLabCloneView) AddViewModel(viewModel *GitLabCloneViewModel) {
-	r.viewModels = append(r.viewModels, viewModel)
 }
 
 func (r *GitLabCloneView) Render(width int) (lines int) {
 	var out strings.Builder
-	for _, vm := range r.viewModels {
+	for _, vm := range r.viewModelsProvider() {
 		out.WriteString(
 			fmt.Sprintf(
 				"%s\n  <- %s:\n    %s projects in %s groups\n    %s direct projects\n    %s git clones (%s archived)\n",
