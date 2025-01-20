@@ -25,8 +25,7 @@ func ExecuteCloneCommand(
 	var cloneChannelsRateLimited []<-chan *gitrepo.Repository
 	for _, gitLabConfig := range config.GitLab {
 		absPath, _ := filepath.Abs(gitLabConfig.CloneDirectory)
-		cloneViewModel := terminalView.NewGitLabCloneViewModel(gitLabConfig.HostName, absPath)
-		vm.AddGitLabCloneVM(cloneViewModel)
+		cloneViewModel := vm.AddGitLabCloneVM(gitLabConfig.HostName, absPath)
 		token := gitLabConfig.RetrieveTokenFromEnv()
 		if token == "" {
 			errorChannel <- fmt.Errorf(
@@ -44,7 +43,7 @@ func ExecuteCloneCommand(
 
 		labApi := gitlab.NewAPIClient(token, gitLabConfig.HostName)
 		channeledApi := gitlab.NewChanneledApi(
-			labApi, &gitLabConfig, cloneViewModel.GroupProjectCount, cloneViewModel.GroupCount,
+			labApi, &gitLabConfig, cloneViewModel.GroupProjectCount, cloneViewModel.GroupCount, errorChannel,
 		)
 		remoteRepoChannel := channeledApi.ScheduleDirectProjects(cloneViewModel.DirectProjectCount)
 

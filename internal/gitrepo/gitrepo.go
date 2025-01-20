@@ -92,12 +92,14 @@ func (repo *Repository) WriteArchivedMarker(projectPath string) error {
 	// Create the marker file
 	file, err := os.Create(markerFilePath)
 	if err != nil {
+		// To publish to errorChannel or not...that is the question.
 		Log.Errorf("failed to create marker file: %v", err)
 		return err
 	}
 	defer func(file *os.File) {
 		err := file.Close()
 		if err != nil {
+			// To publish to errorChannel or not...that is the question.
 			Log.Errorf("failed to close marker file: %v", err)
 		}
 	}(file)
@@ -129,7 +131,11 @@ func (_ RemoteCloneOptions) CloneArchived() bool {
 	return true
 }
 
-func CreateFromGitRemoteConfig(project gitremote.GitRemoteProjectConfig, hostName string, cloneDirectory string) *Repository {
+func CreateFromGitRemoteConfig(
+	project gitremote.GitRemoteProjectConfig,
+	hostName string,
+	cloneDirectory string,
+) *Repository {
 	opts := RemoteCloneOptions{cloneDirectory: cloneDirectory}
 
 	var gitRepo = Repository{

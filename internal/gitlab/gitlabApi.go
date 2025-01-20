@@ -81,6 +81,7 @@ func gitlabGet[T any](token string, url string) (T, error) {
 	defer func(body io.ReadCloser) {
 		err := body.Close()
 		if err != nil {
+			// To publish to errorChannel or not...that is the question.
 			logger.Log.Errorf("Failed to close response body: %v", err)
 		}
 	}(resp.Body)

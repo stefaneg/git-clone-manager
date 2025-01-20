@@ -17,18 +17,35 @@ type ChanneledApi struct {
 	config         *GitLabConfig
 	projectCounter *counter.Counter
 	groupCounter   *counter.Counter
+	errorChannel   chan error
 }
 
 // NEXT: ADD Reporting counters and error channel handler...
 
-func NewChanneledApi(repo *APIClient, config *GitLabConfig, projectCounter *counter.Counter, groupCounter *counter.Counter) *ChanneledApi {
-	return &ChanneledApi{api: repo, config: config, projectCounter: projectCounter, groupCounter: groupCounter}
+func NewChanneledApi(
+	repo *APIClient,
+	config *GitLabConfig,
+	projectCounter *counter.Counter,
+	groupCounter *counter.Counter,
+	errorChannel chan error,
+) *ChanneledApi {
+	return &ChanneledApi{
+		api:            repo,
+		config:         config,
+		projectCounter: projectCounter,
+		groupCounter:   groupCounter,
+		errorChannel:   errorChannel,
+	}
 }
 
-func (channeledApi *ChanneledApi) fetchProjectsForGroup(group *Group, rootGroupConfig *GroupConfig, projectChannel chan Project) {
+func (channeledApi *ChanneledApi) fetchProjectsForGroup(
+	group *Group,
+	rootGroupConfig *GroupConfig,
+	projectChannel chan Project,
+) {
 	projects, err := channeledApi.api.fetchProjects(group)
 	if err != nil {
-		Log.Errorf("failed to fetch projects for group %s: %v", group.Name, err)
+		channeledApi.errorChannel <- fmt.Errorf("failed to fetch projects for group %s: %v", group.Name, err)
 		return
 	}
 	for _, project := range projects {
@@ -43,7 +60,7 @@ func (channeledApi *ChanneledApi) fetchProjectsForGroup(group *Group, rootGroupC
 func (channeledApi *ChanneledApi) channelSubgroups(groupId string, gwg *sync.WaitGroup, groupChannel chan *Group) {
 	subgroups, err := channeledApi.api.fetchSubgroups(groupId)
 	if err != nil {
-		Log.Errorf("failed to fetch subgroups for group %s: %v", groupId, err)
+		channeledApi.errorChannel <- fmt.Errorf("failed to fetch subgroups for group %s: %v", groupId, err)
 		return
 	}
 	for _, subgroup := range subgroups {
@@ -56,14 +73,21 @@ func (channeledApi *ChanneledApi) channelSubgroups(groupId string, gwg *sync.Wai
 	gwg.Done()
 }
 
-func (channeledApi *ChanneledApi) channelGroups(rootGroupConfig *GroupConfig, subGroupsChannel chan<- *Group) {
+func (channeledApi *ChanneledApi) channelGroups(
+	rootGroupConfig *GroupConfig,
+	subGroupsChannel chan<- *Group,
+) {
 
 	gwg := sync.WaitGroup{}
 	groupWorkList := make(chan *Group, GroupChannelBufferSize)
 
 	rootGroup, err := channeledApi.api.fetchGroupInfo(rootGroupConfig.Name)
 	if err != nil {
-		Log.Errorf("failed to fetch rootGroupConfig info for rootGroupConfig %s: %v", rootGroupConfig.Name, err)
+		channeledApi.errorChannel <- fmt.Errorf(
+			"failed to fetch rootGroupConfig info for rootGroupConfig %s: %v",
+			rootGroupConfig.Name,
+			err,
+		)
 		return
 	}
 
@@ -158,7 +182,11 @@ func (channeledApi *ChanneledApi) ScheduleDirectProjects(projectCounter *counter
 	repoChannel := make(chan *gitrepo.Repository, GroupChannelBufferSize)
 	go func() {
 		for _, prj := range channeledApi.config.Projects {
-			repo := gitrepo.CreateFromGitRemoteConfig(prj, channeledApi.config.HostName, channeledApi.config.CloneDirectory)
+			repo := gitrepo.CreateFromGitRemoteConfig(
+				prj,
+				channeledApi.config.HostName,
+				channeledApi.config.CloneDirectory,
+			)
 			projectCounter.Add(1)
 			repoChannel <- repo
 		}

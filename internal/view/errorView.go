@@ -2,6 +2,7 @@ package view
 
 import (
 	"fmt"
+	"gcm/internal/appConfig"
 	"gcm/internal/color"
 	"gcm/internal/counter"
 	"gcm/internal/ext"
@@ -20,7 +21,7 @@ type ErrorViewModel struct {
 func NewErrorViewModel(logFilePath string) *ErrorViewModel {
 	viewModel := ErrorViewModel{
 		errorCount:   counter.NewCounter(),
-		ErrorChannel: make(chan error),
+		ErrorChannel: make(chan error, appConfig.DefaultChannelBufferLength),
 		logFilePath:  logFilePath,
 	}
 	go func() {
