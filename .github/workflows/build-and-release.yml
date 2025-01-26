@@ -2,6 +2,8 @@ name: Build and Release
 
 on:
   push:
+    branches:
+      - test-release-branch
     tags:
       - 'v*.*.*'
 
@@ -18,6 +20,7 @@ jobs:
       matrix:
         go-version: [1.23.x]
         os: [ubuntu-latest, macos-latest]
+        arch: [amd64, arm64]
 
     steps:
       - name: Checkout code
@@ -30,19 +33,23 @@ jobs:
 
       - name: Build
         run: |
-          go build -o gcm
+          if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
+            GOOS=linux GOARCH=${{ matrix.arch }} go build -o gcm-${{ matrix.arch }}
+          else
+            GOOS=darwin GOARCH=${{ matrix.arch }} go build -o gcm-${{ matrix.arch }}
+          fi
 
       - name: Archive binary
         run: |
           mkdir -p release
-          cp gcm release/
-          tar -czvf release/gcm-${{ matrix.os }}.tar.gz -C release gcm
+          cp gcm-${{ matrix.arch }} release/
+          tar -czvf release/gcm-${{ matrix.os }}-${{ matrix.arch }}.tar.gz -C release gcm-${{ matrix.arch }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
-          name: gcm-${{ matrix.os }}
-          path: release/gcm-${{ matrix.os }}.tar.gz
+          name: gcm-${{ matrix.os }}-${{ matrix.arch }}
+          path: release/gcm-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
 
   release:
     needs: build
@@ -52,19 +59,31 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v3
         with:
-          name: gcm-ubuntu-latest
+          name: gcm-ubuntu-latest-amd64
           path: ./release
       - name: Download artifacts
         uses: actions/download-artifact@v3
         with:
-          name: gcm-macos-latest
+          name: gcm-ubuntu-latest-arm64
+          path: ./release
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: gcm-macos-latest-amd64
+          path: ./release
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: gcm-macos-latest-arm64
           path: ./release
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            release/gcm-ubuntu-latest.tar.gz
-            release/gcm-macos-latest.tar.gz
+            release/gcm-ubuntu-latest-amd64.tar.gz
+            release/gcm-ubuntu-latest-arm64.tar.gz
+            release/gcm-macos-latest-amd64.tar.gz
+            release/gcm-macos-latest-arm64.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
