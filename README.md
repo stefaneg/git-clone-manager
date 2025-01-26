@@ -68,14 +68,20 @@ configuration file.
 
 
 # To do
-- Collect error counts, output errors. 
-- Separate into goroutine-free access / repository classes and pipeline classes to collect results.
-- Log commands issued on each repository in separate files. Where exactly is a bit tricky...
-- Delete branches without remote.
+- Collect statistics - how many projects processed - checked out - archived
+- Support GitHub api to clone organisations.
+- Potentially destructive commands are always local in scope by default. --global option to make global in scope.
+- 
+- Create command to add to management "gcm clone <URL>". Adds a repo/group/organisation to clone management, and clones. 
+- Create command to delete branches without remote. "gcm cleanup" && "gcm --global cleanup"
 - Create command that reports projects that are not on main branch
 - Create command that reports projects with dirty index
-- Create command that reports projects with unpushed changes.
-- Collect statistics - how many projects processed - checked out - archived
-- Report all projects that have a) have uncommitted changes b) are behind origin or without a tracked remote branch c) are checked out on a branch.
+- Create command that reports projects with un-pushed changes.
+- Create command to report all projects that  
+  - a) have uncommitted changes 
+  - b) are behind origin or without a tracked remote branch 
+  - c) are checked out on a branch.
 - Create command to pull changes on projects on main and with a clean index.
-- Support GitHub api to clone organisations.
+- Create command to open webUI for repo "gcm webui". Opens Gitlab or Github on page of repo.
+
+- Log commands issued on each repository in separate files. Where exactly is a bit tricky...in checkout root directory ?
