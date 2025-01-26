@@ -10,7 +10,7 @@ import (
 	"path"
 )
 
-type Repository struct {
+type GitRepository struct {
 	Name              string
 	SSHURLToRepo      string
 	PathWithNamespace string
@@ -18,13 +18,19 @@ type Repository struct {
 	CloneOptions      CloneOptions
 }
 
-type CloneOptions interface {
-	CloneArchived() bool
-	CloneRootDirectory() string
-	// ... add project metadata
+func (repo *GitRepository) GetName() string {
+	return repo.Name
 }
 
-func (repo *Repository) Clone() error {
+func (repo *GitRepository) IsArchived() bool {
+	return repo.Archived
+}
+
+func (repo *GitRepository) GetCloneOptions() CloneOptions {
+	return repo.CloneOptions
+}
+
+func (repo *GitRepository) Clone() error {
 	needsCloning, checkErr := repo.CheckNeedsCloning()
 	if !needsCloning {
 		return checkErr
@@ -53,7 +59,7 @@ func (repo *Repository) Clone() error {
 	return nil
 }
 
-func (repo *Repository) CheckNeedsCloning() (bool, error) {
+func (repo *GitRepository) CheckNeedsCloning() (bool, error) {
 	cloned, err := repo.IsCloned()
 	if err != nil {
 		return false, err
@@ -67,7 +73,7 @@ func (repo *Repository) CheckNeedsCloning() (bool, error) {
 	return true, nil
 }
 
-func (repo *Repository) IsCloned() (bool, error) {
+func (repo *GitRepository) IsCloned() (bool, error) {
 	projectPath := repo.getWorkingCopyPath(repo.CloneOptions.CloneRootDirectory())
 	gitDir, err := os.Stat(path.Join(projectPath, ".git"))
 	if os.IsNotExist(err) {
@@ -79,13 +85,13 @@ func (repo *Repository) IsCloned() (bool, error) {
 	return gitDir.IsDir(), nil
 }
 
-func (repo *Repository) getWorkingCopyPath(cloneDirectory string) string {
+func (repo *GitRepository) getWorkingCopyPath(cloneDirectory string) string {
 	projectPath := path.Join(cloneDirectory, repo.PathWithNamespace)
 	return projectPath
 }
 
 // WriteArchivedMarker creates an "ARCHIVED.txt" file in the root directory of the archived project
-func (repo *Repository) WriteArchivedMarker(projectPath string) error {
+func (repo *GitRepository) WriteArchivedMarker(projectPath string) error {
 	// Define the path for the ARCHIVED.txt marker file
 	markerFilePath := path.Join(projectPath, "ARCHIVED.txt")
 
@@ -115,7 +121,7 @@ func (repo *Repository) WriteArchivedMarker(projectPath string) error {
 	return nil
 }
 
-func (repo *Repository) cloneArchived() bool {
+func (repo *GitRepository) cloneArchived() bool {
 	return repo.CloneOptions.CloneArchived()
 }
 
@@ -135,10 +141,10 @@ func CreateFromGitRemoteConfig(
 	project gitremote.GitRemoteProjectConfig,
 	hostName string,
 	cloneDirectory string,
-) *Repository {
+) *GitRepository {
 	opts := RemoteCloneOptions{cloneDirectory: cloneDirectory}
 
-	var gitRepo = Repository{
+	var gitRepo = GitRepository{
 		Name:              project.Name,
 		PathWithNamespace: project.FullPath,
 		SSHURLToRepo:      fmt.Sprintf("git@%s:%s", hostName, project.FullPath),

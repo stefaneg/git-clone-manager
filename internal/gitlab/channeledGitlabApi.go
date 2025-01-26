@@ -155,8 +155,8 @@ func (channeledApi *ChanneledApi) ScheduleGitlabGroupProjectsFetch(groups []Grou
 	return lo.FanIn(ProjectChannelBufferSize, projectChannels...)
 }
 
-func ConvertProjectsToRepos(gitlabProjectChannel <-chan Project) chan *gitrepo.Repository {
-	gitRepoChannel := make(chan *gitrepo.Repository, 10)
+func ConvertProjectsToRepos(gitlabProjectChannel <-chan Project) chan gitrepo.GitRepo {
+	gitRepoChannel := make(chan gitrepo.GitRepo, 10)
 
 	go func() {
 		for {
@@ -164,7 +164,7 @@ func ConvertProjectsToRepos(gitlabProjectChannel <-chan Project) chan *gitrepo.R
 			if !ok {
 				break
 			}
-			gitRepo := gitrepo.Repository{
+			gitRepo := gitrepo.GitRepository{
 				Name:              receivedProject.Name,
 				SSHURLToRepo:      receivedProject.SSHURLToRepo,
 				PathWithNamespace: receivedProject.PathWithNamespace,
@@ -178,8 +178,8 @@ func ConvertProjectsToRepos(gitlabProjectChannel <-chan Project) chan *gitrepo.R
 	return gitRepoChannel
 }
 
-func (channeledApi *ChanneledApi) ScheduleDirectProjects(projectCounter *counter.Counter) chan *gitrepo.Repository {
-	repoChannel := make(chan *gitrepo.Repository, GroupChannelBufferSize)
+func (channeledApi *ChanneledApi) ScheduleDirectProjects(projectCounter *counter.Counter) chan gitrepo.GitRepo {
+	repoChannel := make(chan gitrepo.GitRepo, GroupChannelBufferSize)
 	go func() {
 		for _, prj := range channeledApi.config.Projects {
 			repo := gitrepo.CreateFromGitRemoteConfig(

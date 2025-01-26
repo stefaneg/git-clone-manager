@@ -22,7 +22,7 @@ func ExecuteCloneCommand(
 	vm *terminalView.CloneCommandViewModel,
 ) {
 
-	var cloneChannelsRateLimited []<-chan *gitrepo.Repository
+	var cloneChannelsRateLimited []<-chan gitrepo.GitRepo
 	for _, gitLabConfig := range config.GitLab {
 		absPath, _ := filepath.Abs(gitLabConfig.CloneDirectory)
 		cloneViewModel := vm.AddGitLabCloneVM(gitLabConfig.HostName, absPath)
@@ -50,12 +50,12 @@ func ExecuteCloneCommand(
 		gitlabGroupProjectsChannel := channeledApi.ScheduleGitlabGroupProjectsFetch(gitLabConfig.Groups)
 		reposChannel := gitlab.ConvertProjectsToRepos(gitlabGroupProjectsChannel)
 
-		var potentialClonesChannel []<-chan *gitrepo.Repository
+		var potentialClonesChannel []<-chan gitrepo.GitRepo
 		potentialClonesChannel = append(potentialClonesChannel, reposChannel, remoteRepoChannel)
 		in := lo.FanIn(appConfig.DefaultChannelBufferLength, potentialClonesChannel...)
-		var cloneChannelRateLimited = channel.RateLimit[*gitrepo.Repository](
+		var cloneChannelRateLimited = channel.RateLimit[gitrepo.GitRepo](
 			gitrepo.FilterCloneNeeded(
-				in, cloneViewModel.ArchivedCloneCounter, cloneViewModel.CloneCount,
+				in, cloneViewModel.ArchivedCloneCounter, cloneViewModel.CloneCount, errorChannel,
 			), gitLabConfig.GetConfiguredCloneRate(), appConfig.DefaultChannelBufferLength,
 		)
 
