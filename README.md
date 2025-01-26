@@ -55,6 +55,12 @@ Compile the git clone manager using the Go compiler:
 go build -o gcm
 ```
 
+### Unit test
+
+```shell
+go test ./...
+```
+
 # Use
 
 Currently, the only command is "clone". Running ```gcm``` will clone all groups and projects specified in your 

@@ -1,49 +1,63 @@
 package gitrepo
 
 import (
+	"fmt"
+	"gcm/internal/counter"
+	"gcm/internal/log"
 	"sync"
-	"tools/internal/color"
-	"tools/internal/counter"
-	"tools/internal/log"
 )
 
-func CloneRepositories(repositories <-chan *Repository, cloneCounter *counter.Counter) {
+func CloneRepositories(repositories <-chan GitRepo, cloneCounter *counter.Counter, errorChannel chan error) {
 	cloneWaitGroup := sync.WaitGroup{}
 	for {
 		receivedRepo, ok := <-repositories
 		if !ok {
 			break
 		}
-		cloneCounter.Add(1)
 		cloneWaitGroup.Add(1)
 		go func() {
 			defer cloneWaitGroup.Done()
 			err := receivedRepo.Clone()
 			if err != nil {
-				logger.Log.Errorf("Failed to clone project %s: %v", color.FgRed(receivedRepo.Name), err)
+				errorChannel <- fmt.Errorf("failed to clone project %s: %v", receivedRepo.GetName(), err)
+				return
 			}
+			cloneCounter.Add(1)
 		}()
 	}
 	cloneWaitGroup.Wait()
 }
 
-func FilterCloneNeeded(checkCloneChannel <-chan *Repository, archivedCounter *counter.Counter, clonedCounter *counter.Counter) chan *Repository {
-	gitCloneChannel := make(chan *Repository, 20)
+func FilterCloneNeeded(
+	repositories <-chan GitRepo,
+	archivedCounter *counter.Counter,
+	clonedCounter *counter.Counter,
+	errorChan chan error,
+) chan GitRepo {
+	gitCloneChannel := make(chan GitRepo, 20)
 	checkWaitGroup := sync.WaitGroup{}
 	go func() {
 		for {
-			receivedRepo, ok := <-checkCloneChannel
+			receivedRepo, ok := <-repositories
 			if !ok {
-				logger.Log.Tracef("%s \n", "Clone channel close, wait for last clone to finish, then breaking")
+				logger.Log.Tracef("%s \n", "Clone errorChan close, wait for last clone to finish, then breaking")
 				break
 			}
-			if receivedRepo.Archived && receivedRepo.CloneOptions.CloneArchived() {
+			if receivedRepo.IsArchived() && receivedRepo.GetCloneOptions().CloneArchived() {
 				archivedCounter.Add(1)
 			}
 
-			needsCloning, _ := receivedRepo.CheckNeedsCloning()
-			cloned, _ := receivedRepo.IsCloned()
-			// TODO ADD ERROR HANDLING CHANNEL
+			needsCloning, err := receivedRepo.CheckNeedsCloning()
+			if err != nil {
+				errorChan <- fmt.Errorf("error checking if project needs cloning %s: %v", receivedRepo.GetName(), err)
+				continue
+			}
+
+			cloned, err := receivedRepo.IsCloned()
+			if err != nil {
+				errorChan <- fmt.Errorf("error checking clone status %s: %v", receivedRepo.GetName(), err)
+				continue
+			}
 			if cloned || needsCloning {
 				clonedCounter.Add(1)
 			}
@@ -52,7 +66,7 @@ func FilterCloneNeeded(checkCloneChannel <-chan *Repository, archivedCounter *co
 				checkWaitGroup.Add(1)
 				go func() {
 					defer checkWaitGroup.Done()
-					logger.Log.Debugf("Adding %s to clone queue ", receivedRepo.Name)
+					logger.Log.Debugf("Adding %s to clone queue ", receivedRepo.GetName())
 					gitCloneChannel <- receivedRepo
 				}()
 			} else {

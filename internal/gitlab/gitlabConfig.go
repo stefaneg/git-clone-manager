@@ -1,9 +1,9 @@
 package gitlab
 
 import (
+	"gcm/internal/ext"
+	"gcm/internal/gitremote"
 	"os"
-	"tools/internal/ext"
-	"tools/internal/gitremote"
 )
 
 // This rate is tested to minimise error rate on cloning 250 repositories.
@@ -13,12 +13,12 @@ type GitLabConfig struct {
 	EnvTokenVariableName string                             `yaml:"tokenEnvVar"`    // The environment variable name for the GitLab token
 	HostName             string                             `yaml:"hostName"`       // Gitlab host name
 	CloneDirectory       string                             `yaml:"cloneDirectory"` // Where to clone projects in local directory structure
-	Groups               []GitLabGroupConfig                `yaml:"groups"`
+	Groups               []GroupConfig                      `yaml:"groups"`
 	Projects             []gitremote.GitRemoteProjectConfig `yaml:"projects"`
 	RateLimitPerSecond   int                                `yaml:"rateLimitPerSecond"` // 0 is interpreted as no limit
 }
 
-type GitLabGroupConfig struct {
+type GroupConfig struct {
 	Name          string `yaml:"name"`
 	CloneArchived bool   `yaml:"cloneArchived"`
 }

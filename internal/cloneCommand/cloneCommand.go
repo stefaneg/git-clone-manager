@@ -2,64 +2,69 @@ package cloneCommand
 
 import (
 	"fmt"
+	"gcm/internal/appConfig"
+	"gcm/internal/channel"
+	"gcm/internal/cloneCommand/terminalView"
+	"gcm/internal/gitlab"
+	"gcm/internal/gitrepo"
+	logger "gcm/internal/log"
 	"github.com/samber/lo"
 	"os"
-	"time"
-	"tools/internal/appConfig"
-	"tools/internal/channel"
-	"tools/internal/color"
-	"tools/internal/counter"
-	"tools/internal/gitlab"
-	"tools/internal/gitrepo"
-	"tools/internal/log"
+	"path/filepath"
 )
 
-func ExecuteCloneCommand(config *appConfig.AppConfig) {
-	startTime := time.Now()
-	clonedNowCounter := counter.NewCounter()
-	cloneCounter := counter.NewCounter()
-	archivedClonesCounter := counter.NewCounter()
-	projectCounter := counter.NewCounter()
-	groupCounter := counter.NewCounter()
+type CloneCommandView struct {
+}
 
-	var cloneChannelsRateLimited []<-chan *gitrepo.Repository
+func ExecuteCloneCommand(
+	config *appConfig.AppConfig,
+	errorChannel chan error,
+	vm *terminalView.CloneCommandViewModel,
+) {
 
+	var cloneChannelsRateLimited []<-chan gitrepo.GitRepo
 	for _, gitLabConfig := range config.GitLab {
-
+		absPath, _ := filepath.Abs(gitLabConfig.CloneDirectory)
+		cloneViewModel := vm.AddGitLabCloneVM(gitLabConfig.HostName, absPath)
 		token := gitLabConfig.RetrieveTokenFromEnv()
 		if token == "" {
-			logger.Log.Printf("Gitlab token env variable %s not set for %s; skipping", color.FgRed(gitLabConfig.EnvTokenVariableName), color.FgCyan(gitLabConfig.HostName))
+			errorChannel <- fmt.Errorf(
+				"Gitlab token env variable %s not set for %s; skipping",
+				gitLabConfig.EnvTokenVariableName,
+				gitLabConfig.HostName,
+			)
 			continue
 		}
-
-		logger.Log.Infof("Cloning %s groups & %s projects from %s into %s", color.FgMagenta(fmt.Sprintf("%d", len(gitLabConfig.Groups))), color.FgMagenta(fmt.Sprintf("%d", len(gitLabConfig.Projects))), color.FgCyan(gitLabConfig.HostName), color.FgCyan(gitLabConfig.CloneDirectory))
 
 		err := os.MkdirAll(gitLabConfig.CloneDirectory, os.ModePerm)
 		if err != nil {
 			logger.Log.Fatalf("Failed to create clone root directory: %v", err)
 		}
 
-		labApi := gitlab.NewGitlabAPI(token, gitLabConfig.HostName)
-		channeledApi := gitlab.NewChanneledApi(labApi, &gitLabConfig, projectCounter, groupCounter)
-		remoteRepoChannel := channeledApi.ScheduleRemoteProjects()
+		labApi := gitlab.NewAPIClient(token, gitLabConfig.HostName)
+		channeledApi := gitlab.NewChanneledApi(
+			labApi, &gitLabConfig, cloneViewModel.GroupProjectCount, cloneViewModel.GroupCount, errorChannel,
+		)
+		remoteRepoChannel := channeledApi.ScheduleDirectProjects(cloneViewModel.DirectProjectCount)
 
 		gitlabGroupProjectsChannel := channeledApi.ScheduleGitlabGroupProjectsFetch(gitLabConfig.Groups)
 		reposChannel := gitlab.ConvertProjectsToRepos(gitlabGroupProjectsChannel)
 
-		var potentialClonesChannel []<-chan *gitrepo.Repository
+		var potentialClonesChannel []<-chan gitrepo.GitRepo
 		potentialClonesChannel = append(potentialClonesChannel, reposChannel, remoteRepoChannel)
 		in := lo.FanIn(appConfig.DefaultChannelBufferLength, potentialClonesChannel...)
-		var cloneChannelRateLimited = channel.RateLimit[*gitrepo.Repository](gitrepo.FilterCloneNeeded(in, archivedClonesCounter, cloneCounter), gitLabConfig.GetConfiguredCloneRate(), 10)
+		var cloneChannelRateLimited = channel.RateLimit[gitrepo.GitRepo](
+			gitrepo.FilterCloneNeeded(
+				in, cloneViewModel.ArchivedCloneCounter, cloneViewModel.CloneCount, errorChannel,
+			), gitLabConfig.GetConfiguredCloneRate(), appConfig.DefaultChannelBufferLength,
+		)
 
 		cloneChannelsRateLimited = append(cloneChannelsRateLimited, cloneChannelRateLimited)
 	}
-	gitrepo.CloneRepositories(lo.FanIn(appConfig.DefaultChannelBufferLength, cloneChannelsRateLimited...), clonedNowCounter)
 
-	logger.Log.Infof("%s projects in %s groups\n%s git clones (%s archived) \n%s cloned now\n%s seconds",
-		color.FgMagenta(fmt.Sprintf("%d", projectCounter.Count())),
-		color.FgMagenta(fmt.Sprintf("%d", groupCounter.Count())),
-		color.FgMagenta(fmt.Sprintf("%d", cloneCounter.Count())),
-		color.FgMagenta(fmt.Sprintf("%d", archivedClonesCounter.Count())),
-		color.FgMagenta(fmt.Sprintf("%d", clonedNowCounter.Count())),
-		color.FgGreen(fmt.Sprintf("%.2f", time.Since(startTime).Seconds())))
+	gitrepo.CloneRepositories(
+		lo.FanIn(appConfig.DefaultChannelBufferLength, cloneChannelsRateLimited...),
+		vm.ClonedNowViewModel.ClonedNowCount,
+		errorChannel,
+	)
 }

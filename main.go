@@ -1,16 +1,19 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"gcm/internal/appConfig"
+	"gcm/internal/cloneCommand"
+	"gcm/internal/cloneCommand/terminalView"
+	. "gcm/internal/log"
+	"gcm/internal/view"
+	typex "gcm/type"
+	"golang.org/x/term"
+	"gopkg.in/yaml.v2"
 	"os"
 	"path/filepath"
-	"tools/internal/appConfig"
-	"tools/internal/cloneCommand"
-	. "tools/internal/log"
-	typex "tools/type"
-
-	"gopkg.in/yaml.v2"
 )
 
 func main() {
@@ -32,8 +35,25 @@ func main() {
 		Log.Fatalf("Failed to load configuration: %v", err)
 		os.Exit(1)
 	}
+	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
 
-	cloneCommand.ExecuteCloneCommand(config)
+	cloneCommandViewModel := terminalView.NewCloneCommandViewModel()
+
+	cloneView := terminalView.NewCloneCommandView(cloneCommandViewModel)
+
+	ctx, stopRenderLoop := context.WithCancel(context.Background())
+	if isTTY {
+		go view.StartTTYRenderLoop(cloneView, os.Stdout, ctx, os.Stdout)
+	}
+
+	cloneCommand.ExecuteCloneCommand(config, cloneCommandViewModel.ErrorViewModel.ErrorChannel, cloneCommandViewModel)
+
+	stopRenderLoop()
+
+	if !isTTY {
+		cloneView.Render(0)
+	}
+
 }
 
 func loadConfig(configFileName string) (*appConfig.AppConfig, error) {

@@ -5,9 +5,9 @@ package ext
 
 import (
 	"fmt"
+	logger "gcm/internal/log"
 	"sync"
 	"sync/atomic"
-	logger "tools/internal/log"
 )
 
 type DebugWaitGroup struct {
