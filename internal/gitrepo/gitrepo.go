@@ -30,7 +30,7 @@ func (repo *GitRepository) GetCloneOptions() CloneOptions {
 	return repo.CloneOptions
 }
 
-func (repo *GitRepository) Clone() error {
+func (repo *GitRepository) Clone(cmdRunner sh.CommandRunner) error {
 	needsCloning, checkErr := repo.CheckNeedsCloning()
 	if !needsCloning {
 		return checkErr
@@ -43,7 +43,8 @@ func (repo *GitRepository) Clone() error {
 		return fmt.Errorf("failed to create directory %s: %v", projectPath, err)
 	}
 	cloneCmd := fmt.Sprintf("git clone %s .", repo.SSHURLToRepo)
-	_, err = sh.ExecuteShellCommand(sh.DirectoryPath(projectPath), sh.ShellCommand(cloneCmd))
+
+	_, err = cmdRunner.ExecuteShellCommand(sh.DirectoryPath(projectPath), sh.ShellCommand(cloneCmd))
 
 	if err != nil {
 		return fmt.Errorf("in %s, %s failed: %s", projectPath, cloneCmd, err)
@@ -73,6 +74,7 @@ func (repo *GitRepository) CheckNeedsCloning() (bool, error) {
 	return true, nil
 }
 
+// AM HERE.... NEXT: Abstract fs interface for existence checks, and test IsCloned method.....
 func (repo *GitRepository) IsCloned() (bool, error) {
 	projectPath := repo.getWorkingCopyPath(repo.CloneOptions.CloneRootDirectory())
 	gitDir, err := os.Stat(path.Join(projectPath, ".git"))

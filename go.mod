@@ -4,6 +4,7 @@ go 1.23.2
 
 require (
 	github.com/fatih/color v1.18.0
+	github.com/golang/mock v1.6.0
 	github.com/samber/lo v1.47.0
 	github.com/sirupsen/logrus v1.9.3
 	golang.org/x/term v0.27.0

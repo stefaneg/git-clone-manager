@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"gcm/internal/counter"
 	"gcm/internal/log"
+	"gcm/internal/sh"
 	"sync"
 )
 
@@ -17,7 +18,7 @@ func CloneRepositories(repositories <-chan GitRepo, cloneCounter *counter.Counte
 		cloneWaitGroup.Add(1)
 		go func() {
 			defer cloneWaitGroup.Done()
-			err := receivedRepo.Clone()
+			err := receivedRepo.Clone(&sh.ShellCommandRunner{})
 			if err != nil {
 				errorChannel <- fmt.Errorf("failed to clone project %s: %v", receivedRepo.GetName(), err)
 				return

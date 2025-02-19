@@ -9,7 +9,13 @@ import (
 type DirectoryPath string
 type ShellCommand string
 
-func ExecuteShellCommand(cwd DirectoryPath, command ShellCommand) (string, error) {
+type CommandRunner interface {
+	ExecuteShellCommand(cwd DirectoryPath, command ShellCommand) (string, error)
+}
+
+type ShellCommandRunner struct{}
+
+func (r *ShellCommandRunner) ExecuteShellCommand(cwd DirectoryPath, command ShellCommand) (string, error) {
 	cmd := exec.Command("sh", "-c", string(command))
 	cmd.Dir = string(cwd)
 	cmd.Env = os.Environ()

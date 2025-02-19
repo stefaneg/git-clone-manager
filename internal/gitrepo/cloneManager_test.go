@@ -3,6 +3,7 @@ package gitrepo
 import (
 	"fmt"
 	"gcm/internal/counter"
+	"gcm/internal/sh"
 	"testing"
 )
 
@@ -43,7 +44,7 @@ func (m *MockGitRepo) IsCloned() (bool, error) {
 	return m.isCloned, m.isClonedError
 }
 
-func (m *MockGitRepo) Clone() error {
+func (m *MockGitRepo) Clone(_ sh.CommandRunner) error {
 	return m.cloneError
 }
 
