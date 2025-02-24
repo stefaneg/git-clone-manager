@@ -50,6 +50,7 @@ func (m *MockGitRepo) Clone(_ sh.CommandRunner) error {
 
 type MockCloneOptions struct {
 	cloneArchived bool
+	rootDirectory sh.DirectoryPath
 }
 
 func (m MockCloneOptions) CloneArchived() bool {
@@ -57,7 +58,7 @@ func (m MockCloneOptions) CloneArchived() bool {
 }
 
 func (m MockCloneOptions) CloneRootDirectory() string {
-	return "faking/it/somewhere"
+	return string(m.rootDirectory)
 }
 
 func TestFilterCloneNeeded(t *testing.T) {

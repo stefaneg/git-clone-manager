@@ -182,7 +182,7 @@ func (channeledApi *ChanneledApi) ScheduleDirectProjects(projectCounter *counter
 	repoChannel := make(chan gitrepo.GitRepo, GroupChannelBufferSize)
 	go func() {
 		for _, prj := range channeledApi.config.Projects {
-			repo := gitrepo.CreateFromGitRemoteConfig(
+			repo := gitrepo.NewGitRepositoryFromRemoteConfig(
 				prj,
 				channeledApi.config.HostName,
 				channeledApi.config.CloneDirectory,

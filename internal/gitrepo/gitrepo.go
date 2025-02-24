@@ -2,6 +2,7 @@ package gitrepo
 
 import (
 	"fmt"
+	"gcm/internal/fs"
 	"gcm/internal/gitremote"
 	. "gcm/internal/log"
 	"gcm/internal/sh"
@@ -11,11 +12,37 @@ import (
 )
 
 type GitRepository struct {
-	Name              string
-	SSHURLToRepo      string
-	PathWithNamespace string
-	Archived          bool
-	CloneOptions      CloneOptions
+	Name                   string
+	SSHURLToRepo           string
+	PathWithNamespace      string
+	Archived               bool
+	CloneOptions           CloneOptions
+	DirectoryExistsCheckFn fs.DirectoryExistsCheckFn
+	MkDirFn                fs.MkDirFn
+}
+
+func NewGitRepositoryFromRemoteConfig(
+	project gitremote.GitRemoteProjectConfig,
+	hostName string,
+	cloneDirectory string,
+) *GitRepository {
+	opts := RemoteCloneOptions{cloneDirectory: cloneDirectory}
+
+	name := project.Name
+	fullPath := project.FullPath
+	sprintf := fmt.Sprintf("git@%s:%s", hostName, fullPath)
+	return NewGitRepository(name, fullPath, sprintf, opts)
+}
+
+func NewGitRepository(name string, fullPath string, sprintf string, opts RemoteCloneOptions) *GitRepository {
+	var gitRepo = GitRepository{
+		Name:                   name,
+		PathWithNamespace:      fullPath,
+		SSHURLToRepo:           sprintf,
+		CloneOptions:           opts,
+		DirectoryExistsCheckFn: fs.DirectoryExists,
+	}
+	return &gitRepo
 }
 
 func (repo *GitRepository) GetName() string {
@@ -38,12 +65,12 @@ func (repo *GitRepository) Clone(cmdRunner sh.CommandRunner) error {
 
 	projectPath := repo.getWorkingCopyPath(repo.CloneOptions.CloneRootDirectory())
 	Log.Infof("Cloning %s to %s", repo.Name, projectPath)
-	err := os.MkdirAll(projectPath, os.ModePerm)
+	err := repo.MkDirFn(projectPath)
 	if err != nil {
-		return fmt.Errorf("failed to create directory %s: %v", projectPath, err)
+		return err
 	}
-	cloneCmd := fmt.Sprintf("git clone %s .", repo.SSHURLToRepo)
 
+	cloneCmd := fmt.Sprintf("git clone %s .", repo.SSHURLToRepo)
 	_, err = cmdRunner.ExecuteShellCommand(sh.DirectoryPath(projectPath), sh.ShellCommand(cloneCmd))
 
 	if err != nil {
@@ -74,17 +101,10 @@ func (repo *GitRepository) CheckNeedsCloning() (bool, error) {
 	return true, nil
 }
 
-// AM HERE.... NEXT: Abstract fs interface for existence checks, and test IsCloned method.....
 func (repo *GitRepository) IsCloned() (bool, error) {
 	projectPath := repo.getWorkingCopyPath(repo.CloneOptions.CloneRootDirectory())
-	gitDir, err := os.Stat(path.Join(projectPath, ".git"))
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return gitDir.IsDir(), nil
+	directoryName := path.Join(projectPath, ".git")
+	return repo.DirectoryExistsCheckFn(directoryName)
 }
 
 func (repo *GitRepository) getWorkingCopyPath(cloneDirectory string) string {
@@ -137,20 +157,4 @@ func (rco RemoteCloneOptions) CloneRootDirectory() string {
 
 func (_ RemoteCloneOptions) CloneArchived() bool {
 	return true
-}
-
-func CreateFromGitRemoteConfig(
-	project gitremote.GitRemoteProjectConfig,
-	hostName string,
-	cloneDirectory string,
-) *GitRepository {
-	opts := RemoteCloneOptions{cloneDirectory: cloneDirectory}
-
-	var gitRepo = GitRepository{
-		Name:              project.Name,
-		PathWithNamespace: project.FullPath,
-		SSHURLToRepo:      fmt.Sprintf("git@%s:%s", hostName, project.FullPath),
-		CloneOptions:      opts,
-	}
-	return &gitRepo
 }
