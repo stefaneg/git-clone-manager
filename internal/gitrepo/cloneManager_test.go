@@ -3,6 +3,7 @@ package gitrepo
 import (
 	"fmt"
 	"gcm/internal/counter"
+	"gcm/internal/fs"
 	"gcm/internal/sh"
 	"testing"
 )
@@ -19,7 +20,7 @@ type MockGitRepo struct {
 	markerHasBeenWritten bool
 }
 
-func (m *MockGitRepo) WriteArchivedMarker(_ string) error {
+func (m *MockGitRepo) WriteArchivedMarker(_ fs.DirectoryPath) error {
 	m.markerHasBeenWritten = true
 	return nil
 }
@@ -50,7 +51,7 @@ func (m *MockGitRepo) Clone(_ sh.CommandRunner) error {
 
 type MockCloneOptions struct {
 	cloneArchived bool
-	rootDirectory sh.DirectoryPath
+	rootDirectory fs.DirectoryPath
 }
 
 func (m MockCloneOptions) CloneArchived() bool {

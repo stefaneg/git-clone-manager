@@ -6,8 +6,6 @@ import (
 	"gcm/internal/gitremote"
 	. "gcm/internal/log"
 	"gcm/internal/sh"
-	"github.com/sirupsen/logrus"
-	"os"
 	"path"
 )
 
@@ -19,6 +17,7 @@ type GitRepository struct {
 	CloneOptions           CloneOptions
 	DirectoryExistsCheckFn fs.DirectoryExistsCheckFn
 	MkDirFn                fs.MkDirFn
+	CreateSmallTextFileFn  fs.CreateSmallTextFileFn
 }
 
 func NewGitRepositoryFromRemoteConfig(
@@ -41,6 +40,8 @@ func NewGitRepository(name string, fullPath string, sprintf string, opts RemoteC
 		SSHURLToRepo:           sprintf,
 		CloneOptions:           opts,
 		DirectoryExistsCheckFn: fs.DirectoryExists,
+		MkDirFn:                fs.MkDir,
+		CreateSmallTextFileFn:  fs.CreateSmallTextFile,
 	}
 	return &gitRepo
 }
@@ -63,7 +64,7 @@ func (repo *GitRepository) Clone(cmdRunner sh.CommandRunner) error {
 		return checkErr
 	}
 
-	projectPath := repo.getWorkingCopyPath(repo.CloneOptions.CloneRootDirectory())
+	projectPath := fs.DirectoryPath(repo.getWorkingCopyPath(repo.CloneOptions.CloneRootDirectory()))
 	Log.Infof("Cloning %s to %s", repo.Name, projectPath)
 	err := repo.MkDirFn(projectPath)
 	if err != nil {
@@ -71,7 +72,7 @@ func (repo *GitRepository) Clone(cmdRunner sh.CommandRunner) error {
 	}
 
 	cloneCmd := fmt.Sprintf("git clone %s .", repo.SSHURLToRepo)
-	_, err = cmdRunner.ExecuteShellCommand(sh.DirectoryPath(projectPath), sh.ShellCommand(cloneCmd))
+	_, err = cmdRunner.ExecuteShellCommand(fs.DirectoryPath(projectPath), sh.ShellCommand(cloneCmd))
 
 	if err != nil {
 		return fmt.Errorf("in %s, %s failed: %s", projectPath, cloneCmd, err)
@@ -103,44 +104,19 @@ func (repo *GitRepository) CheckNeedsCloning() (bool, error) {
 
 func (repo *GitRepository) IsCloned() (bool, error) {
 	projectPath := repo.getWorkingCopyPath(repo.CloneOptions.CloneRootDirectory())
-	directoryName := path.Join(projectPath, ".git")
-	return repo.DirectoryExistsCheckFn(directoryName)
+	return repo.DirectoryExistsCheckFn(fs.DirectoryPath(path.Join(projectPath, ".git")))
 }
 
 func (repo *GitRepository) getWorkingCopyPath(cloneDirectory string) string {
-	projectPath := path.Join(cloneDirectory, repo.PathWithNamespace)
-	return projectPath
+	return path.Join(cloneDirectory, repo.PathWithNamespace)
 }
 
 // WriteArchivedMarker creates an "ARCHIVED.txt" file in the root directory of the archived project
-func (repo *GitRepository) WriteArchivedMarker(projectPath string) error {
+func (repo *GitRepository) WriteArchivedMarker(projectPath fs.DirectoryPath) error {
 	// Define the path for the ARCHIVED.txt marker file
-	markerFilePath := path.Join(projectPath, "ARCHIVED.txt")
-
-	// Create the marker file
-	file, err := os.Create(markerFilePath)
-	if err != nil {
-		// To publish to errorChannel or not...that is the question.
-		Log.Errorf("failed to create marker file: %v", err)
-		return err
-	}
-	defer func(file *os.File) {
-		err := file.Close()
-		if err != nil {
-			// To publish to errorChannel or not...that is the question.
-			Log.Errorf("failed to close marker file: %v", err)
-		}
-	}(file)
-
-	// Write a message indicating the repo is archived
-	_, err = file.WriteString("This repo is archived and not active.\n")
-	if err != nil {
-		return fmt.Errorf("failed to write to marker file: %w", err)
-	}
-	if Log.GetLevel() >= logrus.DebugLevel {
-		Log.Debugf("ARCHIVED.txt marker file created at %s\n", markerFilePath)
-	}
-	return nil
+	fileName := "ARCHIVED.txt"
+	fileContent := "This repo is archived and not active.\n"
+	return repo.CreateSmallTextFileFn(projectPath, fileName, fileContent)
 }
 
 func (repo *GitRepository) cloneArchived() bool {

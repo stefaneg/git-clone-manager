@@ -1,13 +1,16 @@
 package gitrepo
 
-import "gcm/internal/sh"
+import (
+	"gcm/internal/fs"
+	"gcm/internal/sh"
+)
 
 type GitRepo interface {
 	GetName() string
 	Clone(cmdRunner sh.CommandRunner) error
 	CheckNeedsCloning() (bool, error)
 	IsCloned() (bool, error)
-	WriteArchivedMarker(projectPath string) error
+	WriteArchivedMarker(projectPath fs.DirectoryPath) error
 	IsArchived() bool
 	GetCloneOptions() CloneOptions
 }

@@ -3,6 +3,7 @@ package gitlab
 import (
 	"fmt"
 	"gcm/internal/counter"
+	"gcm/internal/fs"
 	"gcm/internal/gitrepo"
 	. "gcm/internal/log"
 	"github.com/samber/lo"
@@ -165,11 +166,12 @@ func ConvertProjectsToRepos(gitlabProjectChannel <-chan Project) chan gitrepo.Gi
 				break
 			}
 			gitRepo := gitrepo.GitRepository{
-				Name:              receivedProject.Name,
-				SSHURLToRepo:      receivedProject.SSHURLToRepo,
-				PathWithNamespace: receivedProject.PathWithNamespace,
-				Archived:          receivedProject.Archived,
-				CloneOptions:      receivedProject,
+				Name:                   receivedProject.Name,
+				SSHURLToRepo:           receivedProject.SSHURLToRepo,
+				PathWithNamespace:      receivedProject.PathWithNamespace,
+				Archived:               receivedProject.Archived,
+				CloneOptions:           receivedProject,
+				DirectoryExistsCheckFn: fs.DirectoryExists,
 			}
 			gitRepoChannel <- &gitRepo
 		}

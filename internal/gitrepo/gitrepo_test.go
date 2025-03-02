@@ -1,6 +1,7 @@
 package gitrepo
 
 import (
+	"gcm/internal/fs"
 	"gcm/internal/sh"
 	"testing"
 )
@@ -9,21 +10,20 @@ func TestCloneTableDriven(t *testing.T) {
 	tests := []struct {
 		name string
 		// Arrange
-		cloneExists bool
-		archived    bool
+		archived bool
 
 		// Act
-		cwd           sh.DirectoryPath
+		cwd           fs.DirectoryPath
 		cloneArchived bool
 
 		//  Assert
-		expectedCmd sh.ShellCommand
-		expectedCwd sh.DirectoryPath
-		expectError bool
+		expectedCmd         sh.ShellCommand
+		expectedCwd         fs.DirectoryPath
+		expectError         bool
+		expectArchiveMarker bool
 	}{
 		{
-			name:        "Clone when .git does not exist",
-			cloneExists: false,
+			name: "Clone when .git does not exist",
 
 			cwd:         "/faking/it/somewhere",
 			expectedCmd: "git clone git:somewhere.else .",
@@ -32,21 +32,22 @@ func TestCloneTableDriven(t *testing.T) {
 		},
 		{
 			name:          "Clone when archived",
-			cloneExists:   false,
 			cloneArchived: true,
+			archived:      true,
 
-			cwd:         "/faking/it/somewhere/else",
-			expectedCmd: "git clone git:somewhere.else .",
-			expectedCwd: "/faking/it/somewhere/else",
-			expectError: false,
-			//expectArchiveMarker: true // AM HERE...keep improving those tests
+			cwd:                 "/faking/it/somewhere/else",
+			expectedCmd:         "git clone git:somewhere.else .",
+			expectedCwd:         "/faking/it/somewhere/else",
+			expectError:         false,
+			expectArchiveMarker: true,
 		},
 		{
-			name:        "Clone when directory exists",
-			cloneExists: true,
-			expectedCmd: "",
-			expectedCwd: "",
-			expectError: false,
+			name:                "Clone when directory exists",
+			cwd:                 "/this/one/exists",
+			expectedCmd:         "",
+			expectedCwd:         "",
+			expectError:         false,
+			expectArchiveMarker: false,
 		},
 	}
 
@@ -57,22 +58,22 @@ func TestCloneTableDriven(t *testing.T) {
 					Output: "mock output",
 					Err:    nil,
 				}
-				fakeCloneOptions := MockCloneOptions{cloneArchived: false, rootDirectory: tt.cwd}
+				fakeCloneOptions := MockCloneOptions{cloneArchived: tt.cloneArchived, rootDirectory: tt.cwd}
+				ffs := &fs.FakeFileSystem{
+					ExistingDirs: map[fs.DirectoryPath]bool{
+						"/this/one/exists/.git": true,
+					},
+				}
+
 				gr := GitRepository{
-					Name:              "gitRepoName",
-					SSHURLToRepo:      "git:somewhere.else",
-					PathWithNamespace: "",
-					Archived:          false,
-					CloneOptions:      fakeCloneOptions,
-					DirectoryExistsCheckFn: func(s string) (bool, error) {
-						return tt.cloneExists, nil
-					},
-					MkDirFn: func(dir string) error {
-						if dir != string(tt.cwd) {
-							t.Fatalf("Making the wrong dir, expected %s, got %s", tt.cwd, dir)
-						}
-						return nil
-					},
+					Name:                   "gitRepoName",
+					SSHURLToRepo:           "git:somewhere.else",
+					PathWithNamespace:      "",
+					Archived:               tt.archived,
+					CloneOptions:           fakeCloneOptions,
+					DirectoryExistsCheckFn: ffs.DirectoryExists,
+					MkDirFn:                ffs.MkDir,
+					CreateSmallTextFileFn:  ffs.CreateSmallTextFile,
 				}
 				err := gr.Clone(mockRunner)
 
@@ -87,6 +88,17 @@ func TestCloneTableDriven(t *testing.T) {
 				}
 				if len(mockRunner.ExecutionCwds) > 0 && mockRunner.ExecutionCwds[0] != tt.expectedCwd {
 					t.Fatalf("expected '%v', got '%v'", tt.expectedCwd, mockRunner.ExecutionCwds[0])
+				}
+				if tt.expectArchiveMarker && len(ffs.CreatedFiles) == 0 {
+					t.Fatalf("expected a archive marker file to be created")
+				}
+				if tt.expectArchiveMarker && len(ffs.CreatedFiles) > 0 {
+					if ffs.CreatedFiles[0].FilePath != tt.cwd {
+						t.Fatalf("Expected file to be created in %v, got %v", tt.cwd, ffs.CreatedFiles[0].FilePath)
+					}
+					if ffs.CreatedFiles[0].FileName != "ARCHIVED.txt" {
+						t.Fatalf("Expected filename to be %v, got %v", "ARCHIVED.txt", ffs.CreatedFiles[0].FileName)
+					}
 				}
 			},
 		)
