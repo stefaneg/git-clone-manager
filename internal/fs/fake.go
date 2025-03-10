@@ -3,18 +3,18 @@ package fs
 type FakeFileSystem struct {
 	CreatedFiles []struct {
 		FilePath    DirectoryPath
-		FileName    string
+		FileName    FileName
 		FileContent string
 	}
 	CreatedDirs  []DirectoryPath
 	ExistingDirs map[DirectoryPath]bool
 }
 
-func (ffc *FakeFileSystem) CreateSmallTextFile(filePath DirectoryPath, fileName string, fileContent string) error {
+func (ffc *FakeFileSystem) CreateSmallTextFile(filePath DirectoryPath, fileName FileName, fileContent string) error {
 	ffc.CreatedFiles = append(
 		ffc.CreatedFiles, struct {
 			FilePath    DirectoryPath
-			FileName    string
+			FileName    FileName
 			FileContent string
 		}{filePath, fileName, fileContent},
 	)

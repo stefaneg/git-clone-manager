@@ -8,8 +8,8 @@ import (
 	"path"
 )
 
-func DirectoryExists(directoryName DirectoryPath) (bool, error) {
-	gitDir, err := os.Stat(string(directoryName))
+func DirectoryExists(dirPath DirectoryPath) (bool, error) {
+	gitDir, err := os.Stat(string(dirPath))
 	if os.IsNotExist(err) {
 		return false, nil
 	}
@@ -19,10 +19,10 @@ func DirectoryExists(directoryName DirectoryPath) (bool, error) {
 	return gitDir.IsDir(), nil
 }
 
-func MkDir(projectPath DirectoryPath) error {
-	err := os.MkdirAll(string(projectPath), os.ModePerm)
+func MkDir(dirPath DirectoryPath) error {
+	err := os.MkdirAll(string(dirPath), os.ModePerm)
 	if err != nil {
-		return fmt.Errorf("failed to create directory %s: %v", projectPath, err)
+		return fmt.Errorf("failed to create directory %s: %v", dirPath, err)
 	}
 	return nil
 }
@@ -32,8 +32,8 @@ func MkDir(projectPath DirectoryPath) error {
 // FileName: the name of the file to be created.
 // fileContent: the content to be written to the file.
 // Returns an error if the file creation or writing fails.
-func CreateSmallTextFile(filePath DirectoryPath, fileName string, fileContent string) error {
-	markerFilePath := path.Join(string(filePath), fileName)
+func CreateSmallTextFile(filePath DirectoryPath, fileName FileName, fileContent string) error {
+	markerFilePath := path.Join(string(filePath), string(fileName))
 	// Create the marker file
 	file, err := os.Create(markerFilePath)
 	if err != nil {

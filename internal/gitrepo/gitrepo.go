@@ -21,7 +21,7 @@ type GitRepository struct {
 }
 
 func NewGitRepositoryFromRemoteConfig(
-	project gitremote.GitRemoteProjectConfig,
+	project gitremote.ProjectConfig,
 	hostName string,
 	cloneDirectory string,
 ) *GitRepository {
@@ -114,7 +114,7 @@ func (repo *GitRepository) getWorkingCopyPath(cloneDirectory string) string {
 // WriteArchivedMarker creates an "ARCHIVED.txt" file in the root directory of the archived project
 func (repo *GitRepository) WriteArchivedMarker(projectPath fs.DirectoryPath) error {
 	// Define the path for the ARCHIVED.txt marker file
-	fileName := "ARCHIVED.txt"
+	fileName := fs.FileName("ARCHIVED.txt")
 	fileContent := "This repo is archived and not active.\n"
 	return repo.CreateSmallTextFileFn(projectPath, fileName, fileContent)
 }

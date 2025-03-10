@@ -70,7 +70,6 @@ func (channeledApi *ChanneledApi) channelSubgroups(groupId string, gwg *sync.Wai
 			groupChannel <- &subgroup
 		}()
 	}
-	// Matching add is where group is sent to channel
 	gwg.Done()
 }
 
@@ -148,7 +147,7 @@ func (channeledApi *ChanneledApi) FetchAndChannelGroupProjects(rootGroupConfig *
 	return gitlabProjectChannel
 }
 
-func (channeledApi *ChanneledApi) ScheduleGitlabGroupProjectsFetch(groups []GroupConfig) <-chan Project {
+func (channeledApi *ChanneledApi) ScheduleFetchGitlabGroupProjects(groups []GroupConfig) <-chan Project {
 	var projectChannels []<-chan Project
 	for _, group := range groups {
 		projectChannels = append(projectChannels, channeledApi.FetchAndChannelGroupProjects(&group))

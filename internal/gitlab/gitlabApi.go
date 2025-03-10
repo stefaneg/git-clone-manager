@@ -54,18 +54,18 @@ func (apiClient APIClient) url() string {
 }
 
 func (apiClient APIClient) fetchProjects(group *Group) ([]Project, error) {
-	return gitlabGet[[]Project](apiClient.token, fmt.Sprintf("%s/groups/%d/projects", apiClient.url(), group.ID))
+	return httpGetJson[[]Project](apiClient.token, fmt.Sprintf("%s/groups/%d/projects", apiClient.url(), group.ID))
 }
 
 func (apiClient APIClient) fetchSubgroups(groupID string) ([]Group, error) {
-	return gitlabGet[[]Group](apiClient.token, fmt.Sprintf("%s/groups/%s/subgroups", apiClient.url(), groupID))
+	return httpGetJson[[]Group](apiClient.token, fmt.Sprintf("%s/groups/%s/subgroups", apiClient.url(), groupID))
 }
 
 func (apiClient APIClient) fetchGroupInfo(groupID string) (*Group, error) {
-	return gitlabGet[*Group](apiClient.token, fmt.Sprintf("%s/groups/%s", apiClient.url(), groupID))
+	return httpGetJson[*Group](apiClient.token, fmt.Sprintf("%s/groups/%s", apiClient.url(), groupID))
 }
 
-func gitlabGet[T any](token string, url string) (T, error) {
+func httpGetJson[T any](token string, url string) (T, error) {
 	var emptyResult T
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {

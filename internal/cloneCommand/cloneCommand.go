@@ -5,11 +5,11 @@ import (
 	"gcm/internal/appConfig"
 	"gcm/internal/channel"
 	"gcm/internal/cloneCommand/terminalView"
+	"gcm/internal/fs"
 	"gcm/internal/gitlab"
 	"gcm/internal/gitrepo"
 	logger "gcm/internal/log"
 	"github.com/samber/lo"
-	"os"
 	"path/filepath"
 )
 
@@ -36,7 +36,7 @@ func ExecuteCloneCommand(
 			continue
 		}
 
-		err := os.MkdirAll(gitLabConfig.CloneDirectory, os.ModePerm)
+		err := fs.MkDir(fs.DirectoryPath(gitLabConfig.CloneDirectory))
 		if err != nil {
 			logger.Log.Fatalf("Failed to create clone root directory: %v", err)
 		}
@@ -47,7 +47,7 @@ func ExecuteCloneCommand(
 		)
 		remoteRepoChannel := channeledApi.ScheduleDirectProjects(cloneViewModel.DirectProjectCount)
 
-		gitlabGroupProjectsChannel := channeledApi.ScheduleGitlabGroupProjectsFetch(gitLabConfig.Groups)
+		gitlabGroupProjectsChannel := channeledApi.ScheduleFetchGitlabGroupProjects(gitLabConfig.Groups)
 		reposChannel := gitlab.ConvertProjectsToRepos(gitlabGroupProjectsChannel)
 
 		var potentialClonesChannel []<-chan gitrepo.GitRepo
