@@ -1,5 +1,7 @@
 package fs
 
+import "strings"
+
 type FakeFileSystem struct {
 	CreatedFiles []struct {
 		FilePath    DirectoryPath
@@ -8,6 +10,7 @@ type FakeFileSystem struct {
 	}
 	CreatedDirs  []DirectoryPath
 	ExistingDirs map[DirectoryPath]bool
+	HomeDir      DirectoryPath
 }
 
 func (ffc *FakeFileSystem) CreateSmallTextFile(filePath DirectoryPath, fileName FileName, fileContent string) error {
@@ -32,4 +35,12 @@ func (ffc *FakeFileSystem) DirectoryExists(dir DirectoryPath) (bool, error) {
 		return false, nil
 	}
 	return exists, nil
+}
+
+func (ffc *FakeFileSystem) ReplaceHomeDirWithTilde(dir DirectoryPath) DirectoryPath {
+	prefix := string(ffc.HomeDir)
+	if strings.HasPrefix(string(dir), prefix) {
+		return DirectoryPath("~" + strings.TrimPrefix(string(dir), prefix))
+	}
+	return dir
 }

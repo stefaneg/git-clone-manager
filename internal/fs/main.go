@@ -6,6 +6,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"os"
 	"path"
+	"strings"
 )
 
 func DirectoryExists(dirPath DirectoryPath) (bool, error) {
@@ -55,4 +56,17 @@ func CreateSmallTextFile(filePath DirectoryPath, fileName FileName, fileContent 
 		logger.Log.Debugf("file created at %s\n", markerFilePath)
 	}
 	return nil
+}
+
+// ReplaceHomeDirWithTilde replaces the home directory in an absolute path with ~
+func ReplaceHomeDirWithTilde(path Path) Path {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return path // If there's an error, return the original path
+	}
+
+	if strings.HasPrefix(string(path), homeDir) {
+		return Path("~" + strings.TrimPrefix(string(path), homeDir))
+	}
+	return path
 }

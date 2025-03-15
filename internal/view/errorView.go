@@ -15,10 +15,10 @@ type ErrorViewModel struct {
 	errorCount   *counter.Counter
 	latestError  string
 	ErrorChannel chan error
-	logFilePath  string
+	logFilePath  fs.FilePath
 }
 
-func NewErrorViewModel(logFilePath string) *ErrorViewModel {
+func NewErrorViewModel(logFilePath fs.FilePath) *ErrorViewModel {
 	viewModel := ErrorViewModel{
 		errorCount:   counter.NewCounter(),
 		ErrorChannel: make(chan error, appConfig.DefaultChannelBufferLength),
@@ -51,7 +51,7 @@ func (v ErrorView) Render(int) int {
 		out := fmt.Sprintf(
 			("--- %s errors ---\nSee log file:\n%s\n"),
 			color.FgRed(fmt.Sprintf("%d", v.viewModel.errorCount.Count())),
-			color.FgMagenta(fs.ReplaceHomeDirWithTilde(v.viewModel.logFilePath)),
+			color.FgMagenta(fs.ReplaceHomeDirWithTilde(fs.Path(v.viewModel.logFilePath))),
 		)
 
 		_, err := fmt.Fprint(v.stdout, out)

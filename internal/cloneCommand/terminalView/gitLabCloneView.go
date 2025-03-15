@@ -12,7 +12,7 @@ import (
 )
 
 type GitLabCloneViewModel struct {
-	CloneRoot            string
+	CloneRoot            fs.DirectoryPath
 	RemoteHostName       string
 	GroupCount           *counter.Counter
 	GroupProjectCount    *counter.Counter
@@ -21,7 +21,7 @@ type GitLabCloneViewModel struct {
 	ArchivedCloneCounter *counter.Counter
 }
 
-func NewGitLabCloneViewModel(remoteHostName string, cloneRoot string) *GitLabCloneViewModel {
+func NewGitLabCloneViewModel(remoteHostName string, cloneRoot fs.DirectoryPath) *GitLabCloneViewModel {
 	return &GitLabCloneViewModel{
 		CloneRoot:            cloneRoot,
 		RemoteHostName:       remoteHostName,
@@ -52,7 +52,12 @@ func (r *GitLabCloneView) Render(width int) (lines int) {
 		out.WriteString(
 			fmt.Sprintf(
 				"%s\n  <- %s:\n    %s projects in %s groups\n    %s direct projects\n    %s git clones (%s archived)\n",
-				color.FgCyan(view.TruncateTextToWidth(width, fs.ReplaceHomeDirWithTilde(vm.CloneRoot))),
+				color.FgCyan(
+					view.TruncateTextToWidth(
+						width,
+						string(fs.ReplaceHomeDirWithTilde(fs.Path(vm.CloneRoot))),
+					),
+				),
 				color.FgCyan(view.TrimTextToWidth(ext.Max(width-6, 1), vm.RemoteHostName)),
 				color.FgMagenta(fmt.Sprintf("%d", vm.GroupProjectCount.Count())),
 				color.FgMagenta(fmt.Sprintf("%d", vm.GroupCount.Count())),

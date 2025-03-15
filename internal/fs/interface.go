@@ -1,6 +1,8 @@
 package fs
 
-type DirectoryPath string
+type Path string
+type DirectoryPath Path
+type FilePath Path
 
 type FileName string
 
