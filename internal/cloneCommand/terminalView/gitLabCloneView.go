@@ -5,6 +5,7 @@ import (
 	"gcm/internal/color"
 	"gcm/internal/counter"
 	"gcm/internal/ext"
+	"gcm/internal/fs"
 	"gcm/internal/view"
 	"io"
 	"strings"
@@ -51,7 +52,7 @@ func (r *GitLabCloneView) Render(width int) (lines int) {
 		out.WriteString(
 			fmt.Sprintf(
 				"%s\n  <- %s:\n    %s projects in %s groups\n    %s direct projects\n    %s git clones (%s archived)\n",
-				color.FgCyan(view.TruncateTextToWidth(width, ext.ReplaceHomeDirWithTilde(vm.CloneRoot))),
+				color.FgCyan(view.TruncateTextToWidth(width, fs.ReplaceHomeDirWithTilde(vm.CloneRoot))),
 				color.FgCyan(view.TrimTextToWidth(ext.Max(width-6, 1), vm.RemoteHostName)),
 				color.FgMagenta(fmt.Sprintf("%d", vm.GroupProjectCount.Count())),
 				color.FgMagenta(fmt.Sprintf("%d", vm.GroupCount.Count())),

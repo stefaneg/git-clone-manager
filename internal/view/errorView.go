@@ -5,7 +5,7 @@ import (
 	"gcm/internal/appConfig"
 	"gcm/internal/color"
 	"gcm/internal/counter"
-	"gcm/internal/ext"
+	"gcm/internal/fs"
 	logger "gcm/internal/log"
 	"io"
 	"strings"
@@ -51,7 +51,7 @@ func (v ErrorView) Render(int) int {
 		out := fmt.Sprintf(
 			("--- %s errors ---\nSee log file:\n%s\n"),
 			color.FgRed(fmt.Sprintf("%d", v.viewModel.errorCount.Count())),
-			color.FgMagenta(ext.ReplaceHomeDirWithTilde(v.viewModel.logFilePath)),
+			color.FgMagenta(fs.ReplaceHomeDirWithTilde(v.viewModel.logFilePath)),
 		)
 
 		_, err := fmt.Fprint(v.stdout, out)
