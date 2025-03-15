@@ -10,6 +10,12 @@
 - Git
 - A GitLab API token with access to the projects you want to clone
 
+### Git hooks
+
+```shell
+brew install golangci-lint
+```
+
 ### Installation
 
 1. Clone the repository:
