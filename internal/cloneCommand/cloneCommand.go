@@ -13,14 +13,11 @@ import (
 	"path/filepath"
 )
 
-type CloneCommandView struct {
-}
-
 func ExecuteCloneCommand(
 	config *appConfig.AppConfig,
-	errorChannel chan error,
 	vm *terminalView.CloneCommandViewModel,
 ) {
+	errorChannel := vm.ErrorViewModel.ErrorChannel
 
 	var cloneChannelsRateLimited []<-chan gitrepo.GitRepo
 	for _, gitLabConfig := range config.GitLab {
@@ -35,7 +32,7 @@ func ExecuteCloneCommand(
 			)
 			continue
 		}
-
+		// NEXT: Test fs makedir
 		err := fs.MkDir(fs.DirectoryPath(gitLabConfig.CloneDirectory))
 		if err != nil {
 			logger.Log.Fatalf("Failed to create clone root directory: %v", err)

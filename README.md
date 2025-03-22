@@ -12,8 +12,14 @@
 
 ### Git hooks
 
+Commit hook is running lint.
 ```shell
 brew install golangci-lint
+```
+
+Install hooks by running
+```shell
+sh ./git-hooks/install-ho****oks.sh
 ```
 
 ### Installation

@@ -7,14 +7,14 @@ import (
 	"testing"
 )
 
-func TestErrorView_Render(t *testing.T) {
+func TestErrorViewRender(t *testing.T) {
 	// Create a new ErrorViewModel and ErrorView
 	vm := &ErrorViewModel{
-		errorCount:  counter.NewCounter(),
-		latestError: "This is a very long error message that should be truncated",
+		ErrorCount:  counter.NewCounter(),
+		LatestError: "This is a very long error message that should be truncated",
 		logFilePath: "somePath.log",
 	}
-	vm.errorCount.Add(1)
+	vm.ErrorCount.Add(1)
 
 	var buf bytes.Buffer
 	view := NewErrorView(vm, &buf)
@@ -29,7 +29,9 @@ func TestErrorView_Render(t *testing.T) {
 	if buf.String() != expectedOutput {
 		fmt.Println("Actual:")
 		fmt.Println(buf.String())
-		t.Errorf("\nexpected %q\n"+
-			"     got %q", expectedOutput, buf.String())
+		t.Errorf(
+			"\nexpected %q\n"+
+				"     got %q", expectedOutput, buf.String(),
+		)
 	}
 }

@@ -12,22 +12,22 @@ import (
 )
 
 type ErrorViewModel struct {
-	errorCount   *counter.Counter
-	latestError  string
+	ErrorCount   *counter.Counter
+	LatestError  string
 	ErrorChannel chan error
 	logFilePath  fs.FilePath
 }
 
 func NewErrorViewModel(logFilePath fs.FilePath) *ErrorViewModel {
 	viewModel := ErrorViewModel{
-		errorCount:   counter.NewCounter(),
+		ErrorCount:   counter.NewCounter(),
 		ErrorChannel: make(chan error, appConfig.DefaultChannelBufferLength),
 		logFilePath:  logFilePath,
 	}
 	go func() {
 		for err := range viewModel.ErrorChannel {
-			viewModel.errorCount.Add(1)
-			viewModel.latestError = err.Error()
+			viewModel.ErrorCount.Add(1)
+			viewModel.LatestError = err.Error()
 			logger.Log.Errorf("%v", err)
 		}
 	}()
@@ -47,10 +47,10 @@ func NewErrorView(vm *ErrorViewModel, stdout io.Writer) *ErrorView {
 }
 
 func (v ErrorView) Render(int) int {
-	if v.viewModel.errorCount.Count() > 0 {
+	if v.viewModel.ErrorCount.Count() > 0 {
 		out := fmt.Sprintf(
 			("--- %s errors ---\nSee log file:\n%s\n"),
-			color.FgRed(fmt.Sprintf("%d", v.viewModel.errorCount.Count())),
+			color.FgRed(fmt.Sprintf("%d", v.viewModel.ErrorCount.Count())),
 			color.FgMagenta(fs.ReplaceHomeDirWithTilde(fs.Path(v.viewModel.logFilePath))),
 		)
 
