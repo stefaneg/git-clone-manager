@@ -53,15 +53,15 @@ func (apiClient APIClient) url() string {
 	return fmt.Sprintf("https://%s/api/v4", apiClient.hostName)
 }
 
-func (apiClient APIClient) fetchProjects(group *Group) ([]Project, error) {
+func (apiClient APIClient) FetchProjects(group *Group) ([]Project, error) {
 	return httpGetJson[[]Project](apiClient.token, fmt.Sprintf("%s/groups/%d/projects", apiClient.url(), group.ID))
 }
 
-func (apiClient APIClient) fetchSubgroups(groupID string) ([]Group, error) {
+func (apiClient APIClient) FetchSubgroups(groupID string) ([]Group, error) {
 	return httpGetJson[[]Group](apiClient.token, fmt.Sprintf("%s/groups/%s/subgroups", apiClient.url(), groupID))
 }
 
-func (apiClient APIClient) fetchGroupInfo(groupID string) (*Group, error) {
+func (apiClient APIClient) FetchGroupInfo(groupID string) (*Group, error) {
 	return httpGetJson[*Group](apiClient.token, fmt.Sprintf("%s/groups/%s", apiClient.url(), groupID))
 }
 

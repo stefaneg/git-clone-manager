@@ -14,7 +14,7 @@ const GroupChannelBufferSize = 20
 const ProjectChannelBufferSize = 20
 
 type ChanneledApi struct {
-	api            *APIClient
+	api            API
 	config         *GitLabConfig
 	projectCounter *counter.Counter
 	groupCounter   *counter.Counter
@@ -24,14 +24,14 @@ type ChanneledApi struct {
 // NEXT: ADD Reporting counters and error channel handler...
 
 func NewChanneledApi(
-	repo *APIClient,
+	gitlabApi API,
 	config *GitLabConfig,
 	projectCounter *counter.Counter,
 	groupCounter *counter.Counter,
 	errorChannel chan error,
 ) *ChanneledApi {
 	return &ChanneledApi{
-		api:            repo,
+		api:            gitlabApi,
 		config:         config,
 		projectCounter: projectCounter,
 		groupCounter:   groupCounter,
@@ -44,7 +44,7 @@ func (channeledApi *ChanneledApi) fetchProjectsForGroup(
 	rootGroupConfig *GroupConfig,
 	projectChannel chan Project,
 ) {
-	projects, err := channeledApi.api.fetchProjects(group)
+	projects, err := channeledApi.api.FetchProjects(group)
 	if err != nil {
 		channeledApi.errorChannel <- fmt.Errorf("failed to fetch projects for group %s: %v", group.Name, err)
 		return
@@ -59,7 +59,7 @@ func (channeledApi *ChanneledApi) fetchProjectsForGroup(
 }
 
 func (channeledApi *ChanneledApi) channelSubgroups(groupId string, gwg *sync.WaitGroup, groupChannel chan *Group) {
-	subgroups, err := channeledApi.api.fetchSubgroups(groupId)
+	subgroups, err := channeledApi.api.FetchSubgroups(groupId)
 	if err != nil {
 		channeledApi.errorChannel <- fmt.Errorf("failed to fetch subgroups for group %s: %v", groupId, err)
 		return
@@ -81,8 +81,8 @@ func (channeledApi *ChanneledApi) channelGroups(
 	gwg := sync.WaitGroup{}
 	groupWorkList := make(chan *Group, GroupChannelBufferSize)
 
-	rootGroup, err := channeledApi.api.fetchGroupInfo(rootGroupConfig.Name)
-	if err != nil {
+	rootGroup, err := channeledApi.api.FetchGroupInfo(rootGroupConfig.Name)
+	if err != nil || rootGroup == nil {
 		channeledApi.errorChannel <- fmt.Errorf(
 			"failed to fetch rootGroupConfig info for rootGroupConfig %s: %v",
 			rootGroupConfig.Name,
