@@ -13,19 +13,31 @@ func (api *FakeAPI) FetchProjects(group *Group) ([]Project, error) {
 	if api.FetchError != nil {
 		return nil, api.FetchError
 	}
-	return api.Projects[fmt.Sprintf("%d", group.ID)], nil
+	projects, exists := api.Projects[fmt.Sprintf("%d", group.ID)]
+	if !exists {
+		return nil, fmt.Errorf("Fake API request on /groups/%d/projects failed with status: 404 Not Found", group.ID)
+	}
+	return projects, nil
 }
 
 func (api *FakeAPI) FetchSubgroups(groupID string) ([]Group, error) {
 	if api.FetchError != nil {
 		return nil, api.FetchError
 	}
-	return api.Subgroups[groupID], nil
+	groups, exists := api.Subgroups[groupID]
+	if !exists {
+		return nil, fmt.Errorf("Fake API request on /groups/%s/subgroups failed with status: 404 Not Found", groupID)
+	}
+	return groups, nil
 }
 
 func (api *FakeAPI) FetchGroupInfo(groupName string) (*Group, error) {
 	if api.FetchError != nil {
 		return nil, api.FetchError
 	}
-	return api.GroupInfo[groupName], nil
+	group, exists := api.GroupInfo[groupName]
+	if !exists {
+		return nil, fmt.Errorf("Fake API request on /groups/%s failed with status: 404 Not Found", groupName)
+	}
+	return group, nil
 }
