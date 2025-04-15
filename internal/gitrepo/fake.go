@@ -10,25 +10,7 @@ type FakeGitRepository struct {
 	FakeFS *fs.FakeFileSystem
 }
 
-func NewFakeGitRepository(
-	fakeFS *fs.FakeFileSystem,
-	cloneOptions RemoteCloneOptions,
-	archived bool,
-) *FakeGitRepository {
-	return &FakeGitRepository{
-		GitRepository: GitRepository{
-			Name:              "fakeRepo",
-			SSHURLToRepo:      "git:fake.repo",
-			PathWithNamespace: "fake/namespace",
-			Archived:          archived,
-			CloneOptions:      cloneOptions,
-			Fs:                fakeFS,
-		},
-		FakeFS: fakeFS,
-	}
-}
-
-func (fgr *FakeGitRepository) Clone(runner sh.CommandRunner) error {
+func (fgr *FakeGitRepository) Clone(_ sh.CommandRunner) error {
 	// Use the fake filesystem to simulate cloning behavior
 	projectPath := fs.DirectoryPath(fgr.getWorkingCopyPath(fgr.CloneOptions.CloneRootDirectory()))
 	if _, err := fgr.FakeFS.DirectoryExists(fs.DirectoryPath(projectPath)); err == nil {
