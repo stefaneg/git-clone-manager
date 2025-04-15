@@ -70,3 +70,21 @@ func ReplaceHomeDirWithTilde(path Path) Path {
 	}
 	return path
 }
+
+type RealFs struct{}
+
+func (fs *RealFs) DirectoryExistsCheck(directoryPath DirectoryPath) (bool, error) {
+	return DirectoryExists(directoryPath)
+}
+
+func (fs *RealFs) MkDir(dirPath DirectoryPath) error {
+	return MkDir(dirPath)
+}
+
+func (fs *RealFs) DirectoryExists(dirPath DirectoryPath) (bool, error) {
+	return DirectoryExists(dirPath)
+}
+
+func (fs *RealFs) CreateSmallTextFile(filePath DirectoryPath, fileName FileName, fileContent string) error {
+	return CreateSmallTextFile(filePath, fileName, fileContent)
+}

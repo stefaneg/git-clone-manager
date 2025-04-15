@@ -10,38 +10,41 @@ import (
 )
 
 type GitRepository struct {
-	Name                   string
-	SSHURLToRepo           string
-	PathWithNamespace      string
-	Archived               bool
-	CloneOptions           CloneOptions
-	DirectoryExistsCheckFn fs.DirectoryExistsCheckFn
-	MkDirFn                fs.MkDirFn
-	CreateSmallTextFileFn  fs.CreateSmallTextFileFn
+	Name              string
+	SSHURLToRepo      string
+	PathWithNamespace string
+	Archived          bool
+	CloneOptions      CloneOptions
+	Fs                fs.FileSystem
 }
 
 func NewGitRepositoryFromRemoteConfig(
 	project gitremote.ProjectConfig,
 	hostName string,
 	cloneDirectory string,
+	filesystem fs.FileSystem,
 ) *GitRepository {
 	opts := RemoteCloneOptions{cloneDirectory: cloneDirectory}
 
 	name := project.Name
 	fullPath := project.FullPath
 	sprintf := fmt.Sprintf("git@%s:%s", hostName, fullPath)
-	return NewGitRepository(name, fullPath, sprintf, opts)
+	return NewGitRepository(name, fullPath, sprintf, opts, filesystem)
 }
 
-func NewGitRepository(name string, fullPath string, sprintf string, opts RemoteCloneOptions) *GitRepository {
+func NewGitRepository(
+	name string,
+	fullPath string,
+	sprintf string,
+	opts RemoteCloneOptions,
+	filesystem fs.FileSystem,
+) *GitRepository {
 	var gitRepo = GitRepository{
-		Name:                   name,
-		PathWithNamespace:      fullPath,
-		SSHURLToRepo:           sprintf,
-		CloneOptions:           opts,
-		DirectoryExistsCheckFn: fs.DirectoryExists,
-		MkDirFn:                fs.MkDir,
-		CreateSmallTextFileFn:  fs.CreateSmallTextFile,
+		Name:              name,
+		PathWithNamespace: fullPath,
+		SSHURLToRepo:      sprintf,
+		CloneOptions:      opts,
+		Fs:                filesystem,
 	}
 	return &gitRepo
 }
@@ -66,7 +69,7 @@ func (repo *GitRepository) Clone(cmdRunner sh.CommandRunner) error {
 
 	projectPath := fs.DirectoryPath(repo.getWorkingCopyPath(repo.CloneOptions.CloneRootDirectory()))
 	Log.Infof("Cloning %s to %s", repo.Name, projectPath)
-	err := repo.MkDirFn(projectPath)
+	err := repo.Fs.MkDir(projectPath)
 	if err != nil {
 		return err
 	}
@@ -104,7 +107,7 @@ func (repo *GitRepository) CheckNeedsCloning() (bool, error) {
 
 func (repo *GitRepository) IsCloned() (bool, error) {
 	projectPath := repo.getWorkingCopyPath(repo.CloneOptions.CloneRootDirectory())
-	return repo.DirectoryExistsCheckFn(fs.DirectoryPath(path.Join(projectPath, ".git")))
+	return repo.Fs.DirectoryExists(fs.DirectoryPath(path.Join(projectPath, ".git")))
 }
 
 func (repo *GitRepository) getWorkingCopyPath(cloneDirectory string) string {
@@ -116,7 +119,7 @@ func (repo *GitRepository) WriteArchivedMarker(projectPath fs.DirectoryPath) err
 	// Define the path for the ARCHIVED.txt marker file
 	fileName := fs.FileName("ARCHIVED.txt")
 	fileContent := "This repo is archived and not active.\n"
-	return repo.CreateSmallTextFileFn(projectPath, fileName, fileContent)
+	return repo.Fs.CreateSmallTextFile(projectPath, fileName, fileContent)
 }
 
 func (repo *GitRepository) cloneArchived() bool {

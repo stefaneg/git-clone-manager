@@ -12,9 +12,9 @@ import (
 )
 
 type ErrorViewModel struct {
+	ErrorChannel chan error
 	ErrorCount   *counter.Counter
 	LatestError  string
-	ErrorChannel chan error
 	logFilePath  fs.FilePath
 }
 

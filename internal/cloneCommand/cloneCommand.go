@@ -13,16 +13,23 @@ import (
 	"path/filepath"
 )
 
-func ExecuteCloneCommand(
-	config *appConfig.AppConfig,
-	vm *terminalView.CloneCommandViewModel,
-) {
-	errorChannel := vm.ErrorViewModel.ErrorChannel
+type CloneCommand struct {
+	vm *terminalView.CloneCommandViewModel
+}
 
+func NewCloneCommand(vm *terminalView.CloneCommandViewModel) *CloneCommand {
+	return &CloneCommand{
+		vm: vm,
+	}
+}
+
+func (command *CloneCommand) Execute(config *appConfig.AppConfig) {
+	errorChannel := command.vm.ErrorViewModel.ErrorChannel
+	filesystem := fs.RealFs{}
 	var cloneChannelsRateLimited []<-chan gitrepo.GitRepo
 	for _, gitLabConfig := range config.GitLab {
 		absPath, _ := filepath.Abs(gitLabConfig.CloneDirectory)
-		cloneViewModel := vm.AddGitLabCloneVM(gitLabConfig.HostName, absPath)
+		cloneViewModel := command.vm.AddGitLabCloneVM(gitLabConfig.HostName, absPath)
 		token := gitLabConfig.RetrieveTokenFromEnv()
 		if token == "" {
 			errorChannel <- fmt.Errorf(
@@ -32,20 +39,24 @@ func ExecuteCloneCommand(
 			)
 			continue
 		}
-		// NEXT: Test fs makedir
-		err := fs.MkDir(fs.DirectoryPath(gitLabConfig.CloneDirectory))
+		err := filesystem.MkDir(fs.DirectoryPath(gitLabConfig.CloneDirectory))
 		if err != nil {
 			logger.Log.Fatalf("Failed to create clone root directory: %v", err)
 		}
 
 		labApi := gitlab.NewAPIClient(token, gitLabConfig.HostName)
 		channeledApi := gitlab.NewChanneledApi(
-			labApi, &gitLabConfig, cloneViewModel.GroupProjectCount, cloneViewModel.GroupCount, errorChannel,
+			labApi,
+			&filesystem,
+			&gitLabConfig,
+			cloneViewModel.GroupProjectCount,
+			cloneViewModel.GroupCount,
+			errorChannel,
 		)
 		remoteRepoChannel := channeledApi.ScheduleDirectProjects(cloneViewModel.DirectProjectCount)
 
 		gitlabGroupProjectsChannel := channeledApi.ScheduleFetchGitlabGroupProjects(gitLabConfig.Groups)
-		reposChannel := gitlab.ConvertProjectsToRepos(gitlabGroupProjectsChannel)
+		reposChannel := gitlab.ConvertProjectsToRepos(gitlabGroupProjectsChannel, &filesystem)
 
 		var potentialClonesChannel []<-chan gitrepo.GitRepo
 		potentialClonesChannel = append(potentialClonesChannel, reposChannel, remoteRepoChannel)
@@ -61,7 +72,7 @@ func ExecuteCloneCommand(
 
 	gitrepo.CloneRepositories(
 		lo.FanIn(appConfig.DefaultChannelBufferLength, cloneChannelsRateLimited...),
-		vm.ClonedNowViewModel.ClonedNowCount,
+		command.vm.ClonedNowViewModel.ClonedNowCount,
 		errorChannel,
 	)
 }

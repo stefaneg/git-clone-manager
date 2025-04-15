@@ -46,7 +46,8 @@ func main() {
 		go view.StartTTYRenderLoop(cloneView, os.Stdout, ctx, os.Stdout)
 	}
 
-	cloneCommand.ExecuteCloneCommand(config, cloneCommandViewModel)
+	command := cloneCommand.NewCloneCommand(cloneCommandViewModel)
+	command.Execute(config)
 
 	stopRenderLoop()
 

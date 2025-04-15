@@ -15,6 +15,7 @@ const ProjectChannelBufferSize = 20
 
 type ChanneledApi struct {
 	api            API
+	filesystem     fs.FileSystem
 	config         *GitLabConfig
 	projectCounter *counter.Counter
 	groupCounter   *counter.Counter
@@ -25,6 +26,7 @@ type ChanneledApi struct {
 
 func NewChanneledApi(
 	gitlabApi API,
+	filesystem fs.FileSystem,
 	config *GitLabConfig,
 	projectCounter *counter.Counter,
 	groupCounter *counter.Counter,
@@ -32,6 +34,7 @@ func NewChanneledApi(
 ) *ChanneledApi {
 	return &ChanneledApi{
 		api:            gitlabApi,
+		filesystem:     filesystem,
 		config:         config,
 		projectCounter: projectCounter,
 		groupCounter:   groupCounter,
@@ -155,7 +158,7 @@ func (channeledApi *ChanneledApi) ScheduleFetchGitlabGroupProjects(groups []Grou
 	return lo.FanIn(ProjectChannelBufferSize, projectChannels...)
 }
 
-func ConvertProjectsToRepos(gitlabProjectChannel <-chan Project) chan gitrepo.GitRepo {
+func ConvertProjectsToRepos(gitlabProjectChannel <-chan Project, filesystem fs.FileSystem) chan gitrepo.GitRepo {
 	gitRepoChannel := make(chan gitrepo.GitRepo, 10)
 
 	go func() {
@@ -165,12 +168,12 @@ func ConvertProjectsToRepos(gitlabProjectChannel <-chan Project) chan gitrepo.Gi
 				break
 			}
 			gitRepo := gitrepo.GitRepository{
-				Name:                   receivedProject.Name,
-				SSHURLToRepo:           receivedProject.SSHURLToRepo,
-				PathWithNamespace:      receivedProject.PathWithNamespace,
-				Archived:               receivedProject.Archived,
-				CloneOptions:           receivedProject,
-				DirectoryExistsCheckFn: fs.DirectoryExists,
+				Name:              receivedProject.Name,
+				SSHURLToRepo:      receivedProject.SSHURLToRepo,
+				PathWithNamespace: receivedProject.PathWithNamespace,
+				Archived:          receivedProject.Archived,
+				CloneOptions:      receivedProject,
+				Fs:                filesystem,
 			}
 			gitRepoChannel <- &gitRepo
 		}
@@ -182,11 +185,13 @@ func ConvertProjectsToRepos(gitlabProjectChannel <-chan Project) chan gitrepo.Gi
 func (channeledApi *ChanneledApi) ScheduleDirectProjects(projectCounter *counter.Counter) chan gitrepo.GitRepo {
 	repoChannel := make(chan gitrepo.GitRepo, GroupChannelBufferSize)
 	go func() {
+		filesystem := fs.RealFs{}
 		for _, prj := range channeledApi.config.Projects {
 			repo := gitrepo.NewGitRepositoryFromRemoteConfig(
 				prj,
 				channeledApi.config.HostName,
 				channeledApi.config.CloneDirectory,
+				&filesystem,
 			)
 			projectCounter.Add(1)
 			repoChannel <- repo

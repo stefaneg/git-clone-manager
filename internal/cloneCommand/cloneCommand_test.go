@@ -48,7 +48,8 @@ func TestCloneCommandConfigErrorHandling(t *testing.T) {
 	testView := NewFakeCloneCommandViewModel()
 
 	errorChannel := testView.ErrorViewModel.ErrorChannel
-	ExecuteCloneCommand(appCfg, testView)
+	cmd := NewCloneCommand(testView)
+	cmd.Execute(appCfg)
 	// Use appCfg in your test
 
 	expectedError := "Gitlab token env variable GITLAB_TOKEN_ENV_VAR_NOT_SET not set for missing-token.gitlab.com; skipping"

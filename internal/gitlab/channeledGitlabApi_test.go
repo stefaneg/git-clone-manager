@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"gcm/internal/counter"
+	"gcm/internal/fs"
 	"gcm/internal/gitremote"
 	"testing"
 )
@@ -112,7 +113,8 @@ func TestChanneledApi_ScheduleFetchMultiRootGitlabGroupProjects(t *testing.T) {
 		},
 	}
 
-	channeledApi := NewChanneledApi(fakeAPI, config, projectCounter, groupCounter, errorChannel)
+	filesystem := fs.RealFs{}
+	channeledApi := NewChanneledApi(fakeAPI, &filesystem, config, projectCounter, groupCounter, errorChannel)
 
 	groupConfigs := []GroupConfig{
 		{Name: "root1"},
@@ -137,7 +139,9 @@ func TestChanneledApi_ErrorHandling_FetchGroupInfo(t *testing.T) {
 	projectCounter := counter.NewCounter()
 	groupCounter := counter.NewCounter()
 
-	channeledApi := NewChanneledApi(fakeAPI, &GitLabConfig{}, projectCounter, groupCounter, errorChannel)
+	fileSystem := &fs.FakeFileSystem{}
+
+	channeledApi := NewChanneledApi(fakeAPI, fileSystem, &GitLabConfig{}, projectCounter, groupCounter, errorChannel)
 
 	groupConfigs := []GroupConfig{
 		{Name: "nonexistent-group"},
@@ -163,7 +167,8 @@ func TestChanneledApi_ErrorHandling_FetchSubgroups(t *testing.T) {
 	projectCounter := counter.NewCounter()
 	groupCounter := counter.NewCounter()
 
-	channeledApi := NewChanneledApi(fakeAPI, &GitLabConfig{}, projectCounter, groupCounter, errorChannel)
+	fakeFs := &fs.FakeFileSystem{}
+	channeledApi := NewChanneledApi(fakeAPI, fakeFs, &GitLabConfig{}, projectCounter, groupCounter, errorChannel)
 
 	groupConfigs := []GroupConfig{
 		{Name: "root1"},
@@ -193,7 +198,8 @@ func TestChanneledApi_ErrorHandling_FetchProjects(t *testing.T) {
 	projectCounter := counter.NewCounter()
 	groupCounter := counter.NewCounter()
 
-	channeledApi := NewChanneledApi(fakeAPI, &GitLabConfig{}, projectCounter, groupCounter, errorChannel)
+	fakeFs := &fs.FakeFileSystem{}
+	channeledApi := NewChanneledApi(fakeAPI, fakeFs, &GitLabConfig{}, projectCounter, groupCounter, errorChannel)
 
 	groupConfigs := []GroupConfig{
 		{Name: "root1"},

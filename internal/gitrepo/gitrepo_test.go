@@ -66,14 +66,12 @@ func TestCloneTableDriven(t *testing.T) {
 				}
 
 				gr := GitRepository{
-					Name:                   "gitRepoName",
-					SSHURLToRepo:           "git:somewhere.else",
-					PathWithNamespace:      "",
-					Archived:               tt.archived,
-					CloneOptions:           fakeCloneOptions,
-					DirectoryExistsCheckFn: ffs.DirectoryExists,
-					MkDirFn:                ffs.MkDir,
-					CreateSmallTextFileFn:  ffs.CreateSmallTextFile,
+					Name:              "gitRepoName",
+					SSHURLToRepo:      "git:somewhere.else",
+					PathWithNamespace: "",
+					Archived:          tt.archived,
+					CloneOptions:      fakeCloneOptions,
+					Fs:                ffs,
 				}
 				err := gr.Clone(mockRunner)
 
