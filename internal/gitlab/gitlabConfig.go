@@ -3,7 +3,6 @@ package gitlab
 import (
 	"gcm/internal/ext"
 	"gcm/internal/gitremote"
-	"os"
 )
 
 // This rate is tested to minimise error rate on cloning 250 repositories.
@@ -21,11 +20,6 @@ type GitLabConfig struct {
 type GroupConfig struct {
 	Name          string `yaml:"name"`
 	CloneArchived bool   `yaml:"cloneArchived"`
-}
-
-func (gitLabConfig GitLabConfig) RetrieveTokenFromEnv() string {
-	token := os.Getenv(gitLabConfig.EnvTokenVariableName)
-	return token
 }
 
 func (gitLabConfig GitLabConfig) GetConfiguredCloneRate() int {

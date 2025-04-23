@@ -10,25 +10,52 @@ import (
 	"testing"
 )
 
-func GetApiTokenFromEnv() string {
-	token := os.Getenv("GITLAB_API_TOKEN")
+const apiTokenVariableName = "GITLAB_API_TOKEN"
+const hostNameVariableName = "GITLAB_TEST_HOST_NAME"
+
+func GetRequiredEnvVariable(variableName string) string {
+	token := os.Getenv(variableName)
 	if token == "" {
-		log.Fatal("required environment variable GITLAB_API_TOKEN is not set")
+		log.Fatalf("required environment variable %v is not set", variableName)
 	}
 	return token
 }
 
-func TestAPIClient_FetchProjects(t *testing.T) {
-	// Replace with a valid token and hostname for your GitLab instance
-	token := GetApiTokenFromEnv()
-	hostName := "gitlab.example.com"
-
+func newTestApiClient() gitlab.API {
+	token := GetRequiredEnvVariable(apiTokenVariableName)
+	hostName := GetRequiredEnvVariable(hostNameVariableName)
 	apiClient := gitlab.NewAPIClient(token, hostName)
+	return apiClient
+}
+
+func TestAPIClient_FetchAccessibleProjects(t *testing.T) {
+	// Retrieve the API token from the environment
+	apiClient := newTestApiClient()
+
+	// Fetch accessible projects
+	projects, err := apiClient.FetchAccessibleProjects()
+	if err != nil {
+		t.Fatalf("Failed to fetch accessible projects: %v", err)
+	}
+
+	// Ensure at least one project is returned
+	if len(projects) == 0 {
+		t.Fatalf("Expected to fetch at least one accessible project, got none")
+	}
+
+	t.Logf("Fetched %d accessible projects successfully", len(projects))
+	for _, project := range projects {
+		t.Logf("Fetched project: %v", project)
+	}
+}
+
+func TestAPIClient_FetchProjects(t *testing.T) {
+	apiClient := newTestApiClient()
 
 	// Replace with a valid group ID in your GitLab instance
 	group := &gitlab.Group{ID: 1}
 
-	projects, err := apiClient.FetchProjects(group)
+	projects, err := apiClient.FetchGroupProjects(group)
 	if err != nil {
 		t.Fatalf("Failed to fetch projects: %v", err)
 	}
@@ -41,11 +68,7 @@ func TestAPIClient_FetchProjects(t *testing.T) {
 }
 
 func TestAPIClient_FetchSubgroups(t *testing.T) {
-	// Replace with a valid token and hostname for your GitLab instance
-	token := GetApiTokenFromEnv()
-	hostName := "gitlab.example.com"
-
-	apiClient := gitlab.NewAPIClient(token, hostName)
+	apiClient := newTestApiClient()
 
 	// Replace with a valid group ID in your GitLab instance
 	groupID := "1"
@@ -59,11 +82,7 @@ func TestAPIClient_FetchSubgroups(t *testing.T) {
 }
 
 func TestAPIClient_FetchValidGroupInfo(t *testing.T) {
-	// Replace with a valid token and hostname for your GitLab instance
-	token := GetApiTokenFromEnv()
-	hostName := "gitlab.controlant.com"
-
-	apiClient := gitlab.NewAPIClient(token, hostName)
+	apiClient := newTestApiClient()
 
 	// Replace with a valid group ID in your GitLab instance
 	groupID := "catapult"
@@ -81,11 +100,7 @@ func TestAPIClient_FetchValidGroupInfo(t *testing.T) {
 }
 
 func TestAPIClient_FetchInvalidGroupInfo(t *testing.T) {
-	// Replace with a valid token and hostname for your GitLab instance
-	token := GetApiTokenFromEnv()
-	hostName := "gitlab.controlant.com"
-
-	apiClient := gitlab.NewAPIClient(token, hostName)
+	apiClient := newTestApiClient()
 
 	// Replace with a valid group ID in your GitLab instance
 	groupID := "random_non_existing_group"

@@ -13,24 +13,37 @@ import (
 	"path/filepath"
 )
 
+// GetEnvFunc is the type of os.Getenv
+type GetEnvFunc func(string) string
 type CloneCommand struct {
-	vm *terminalView.CloneCommandViewModel
+	vm         *terminalView.CloneCommandViewModel
+	filesystem fs.FileSystem
+	apiFactory gitlab.APIFactory
+	getEnv     GetEnvFunc
 }
 
-func NewCloneCommand(vm *terminalView.CloneCommandViewModel) *CloneCommand {
+func NewCloneCommand(
+	vm *terminalView.CloneCommandViewModel,
+	filesystem fs.FileSystem,
+	apiFactory gitlab.APIFactory,
+	getEnv GetEnvFunc,
+) *CloneCommand {
 	return &CloneCommand{
-		vm: vm,
+		vm:         vm,
+		filesystem: filesystem,
+		apiFactory: apiFactory,
+		getEnv:     getEnv,
 	}
 }
 
 func (command *CloneCommand) Execute(config *appConfig.AppConfig) {
 	errorChannel := command.vm.ErrorViewModel.ErrorChannel
-	filesystem := fs.RealFs{}
+	filesystem := command.filesystem
 	var cloneChannelsRateLimited []<-chan gitrepo.GitRepo
 	for _, gitLabConfig := range config.GitLab {
 		absPath, _ := filepath.Abs(gitLabConfig.CloneDirectory)
 		cloneViewModel := command.vm.AddGitLabCloneVM(gitLabConfig.HostName, absPath)
-		token := gitLabConfig.RetrieveTokenFromEnv()
+		token := command.getEnv(gitLabConfig.EnvTokenVariableName)
 		if token == "" {
 			errorChannel <- fmt.Errorf(
 				"Gitlab token env variable %s not set for %s; skipping",
@@ -44,10 +57,10 @@ func (command *CloneCommand) Execute(config *appConfig.AppConfig) {
 			logger.Log.Fatalf("Failed to create clone root directory: %v", err)
 		}
 
-		labApi := gitlab.NewAPIClient(token, gitLabConfig.HostName)
+		labApi := command.apiFactory(token, gitLabConfig.HostName)
 		channeledApi := gitlab.NewChanneledApi(
 			labApi,
-			&filesystem,
+			filesystem,
 			&gitLabConfig,
 			cloneViewModel.GroupProjectCount,
 			cloneViewModel.GroupCount,
@@ -56,7 +69,7 @@ func (command *CloneCommand) Execute(config *appConfig.AppConfig) {
 		remoteRepoChannel := channeledApi.ScheduleDirectProjects(cloneViewModel.DirectProjectCount)
 
 		gitlabGroupProjectsChannel := channeledApi.ScheduleFetchGitlabGroupProjects(gitLabConfig.Groups)
-		reposChannel := gitlab.ConvertProjectsToRepos(gitlabGroupProjectsChannel, &filesystem)
+		reposChannel := gitlab.ConvertProjectsToRepos(gitlabGroupProjectsChannel, filesystem)
 
 		var potentialClonesChannel []<-chan gitrepo.GitRepo
 		potentialClonesChannel = append(potentialClonesChannel, reposChannel, remoteRepoChannel)
@@ -70,8 +83,10 @@ func (command *CloneCommand) Execute(config *appConfig.AppConfig) {
 		cloneChannelsRateLimited = append(cloneChannelsRateLimited, cloneChannelRateLimited)
 	}
 
+	fanInRepos := lo.FanIn(appConfig.DefaultChannelBufferLength, cloneChannelsRateLimited...)
+
 	gitrepo.CloneRepositories(
-		lo.FanIn(appConfig.DefaultChannelBufferLength, cloneChannelsRateLimited...),
+		fanInRepos,
 		command.vm.ClonedNowViewModel.ClonedNowCount,
 		errorChannel,
 	)

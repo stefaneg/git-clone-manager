@@ -22,8 +22,6 @@ type ChanneledApi struct {
 	errorChannel   chan error
 }
 
-// NEXT: ADD Reporting counters and error channel handler...
-
 func NewChanneledApi(
 	gitlabApi API,
 	filesystem fs.FileSystem,
@@ -47,7 +45,7 @@ func (channeledApi *ChanneledApi) fetchProjectsForGroup(
 	rootGroupConfig *GroupConfig,
 	projectChannel chan Project,
 ) {
-	projects, err := channeledApi.api.FetchProjects(group)
+	projects, err := channeledApi.api.FetchGroupProjects(group)
 	if err != nil {
 		channeledApi.errorChannel <- fmt.Errorf("failed to fetch projects for group %s: %v", group.Name, err)
 		return
@@ -78,7 +76,7 @@ func (channeledApi *ChanneledApi) channelSubgroups(groupId string, gwg *sync.Wai
 
 func (channeledApi *ChanneledApi) channelGroups(
 	rootGroupConfig *GroupConfig,
-	subGroupsChannel chan<- *Group,
+	groupsChannel chan<- *Group,
 ) {
 
 	gwg := sync.WaitGroup{}
@@ -91,8 +89,11 @@ func (channeledApi *ChanneledApi) channelGroups(
 			rootGroupConfig.Name,
 			err,
 		)
+		close(groupWorkList)
 		return
 	}
+
+	groupsChannel <- rootGroup
 
 	// Matching Done is where subgroups have been fetched and all sent to fetch channel
 	gwg.Add(1)
@@ -109,11 +110,11 @@ func (channeledApi *ChanneledApi) channelGroups(
 			if !ok {
 				break
 			}
-			subGroupsChannel <- receivedGroup
+			groupsChannel <- receivedGroup
 			groupId := receivedGroup.ID
 			channeledApi.channelSubgroups(fmt.Sprintf("%d", groupId), &gwg, groupWorkList)
 		}
-		close(subGroupsChannel)
+		close(groupsChannel)
 	}()
 	gwg.Wait()
 	close(groupWorkList)

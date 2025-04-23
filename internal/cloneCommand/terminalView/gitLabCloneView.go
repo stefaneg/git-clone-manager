@@ -58,7 +58,7 @@ func (r *GitLabCloneView) Render(width int) (lines int) {
 						string(fs.ReplaceHomeDirWithTilde(fs.Path(vm.CloneRoot))),
 					),
 				),
-				color.FgCyan(view.TrimTextToWidth(ext.Max(width-6, 1), vm.RemoteHostName)),
+				color.FgCyan(view.TrimTextToWidth(ext.MaxI(width-6, 1), vm.RemoteHostName)),
 				color.FgMagenta(fmt.Sprintf("%d", vm.GroupProjectCount.Count())),
 				color.FgMagenta(fmt.Sprintf("%d", vm.GroupCount.Count())),
 				color.FgMagenta(fmt.Sprintf("%d", vm.DirectProjectCount.Count())),

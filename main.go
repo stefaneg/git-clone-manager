@@ -7,6 +7,8 @@ import (
 	"gcm/internal/appConfig"
 	"gcm/internal/cloneCommand"
 	"gcm/internal/cloneCommand/terminalView"
+	"gcm/internal/fs"
+	"gcm/internal/gitlab"
 	. "gcm/internal/log"
 	"gcm/internal/view"
 	typex "gcm/type"
@@ -46,7 +48,7 @@ func main() {
 		go view.StartTTYRenderLoop(cloneView, os.Stdout, ctx, os.Stdout)
 	}
 
-	command := cloneCommand.NewCloneCommand(cloneCommandViewModel)
+	command := cloneCommand.NewCloneCommand(cloneCommandViewModel, &fs.RealFs{}, gitlab.NewAPIClient, os.Getenv)
 	command.Execute(config)
 
 	stopRenderLoop()

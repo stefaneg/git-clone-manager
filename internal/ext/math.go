@@ -8,8 +8,15 @@ func Min(a, b int) int {
 	return b
 }
 
-// Max returns the greater of two integers
-func Max(a, b int) int {
+// MaxI returns the greater of two integers
+func MaxI(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func MaxI64(a, b int64) int64 {
 	if a > b {
 		return a
 	}

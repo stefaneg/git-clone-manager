@@ -18,7 +18,7 @@ func CloneRepositories(repositories <-chan GitRepo, cloneCounter *counter.Counte
 		cloneWaitGroup.Add(1)
 		go func() {
 			defer cloneWaitGroup.Done()
-			err := receivedRepo.Clone(&sh.ShellCommandRunner{})
+			err := receivedRepo.Clone(&sh.ShellCommandRunner{}) // HERE....NEED TO INHJECT COMMAND RUNNER.....
 			if err != nil {
 				errorChannel <- fmt.Errorf("failed to clone project %s: %v", receivedRepo.GetName(), err)
 				return

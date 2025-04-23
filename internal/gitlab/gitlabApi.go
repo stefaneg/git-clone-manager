@@ -42,7 +42,7 @@ type APIClient struct {
 	token    string
 }
 
-func NewAPIClient(token, hostName string) *APIClient {
+func NewAPIClient(token, hostName string) API {
 	return &APIClient{
 		hostName: hostName,
 		token:    token,
@@ -53,7 +53,12 @@ func (apiClient APIClient) url() string {
 	return fmt.Sprintf("https://%s/api/v4", apiClient.hostName)
 }
 
-func (apiClient APIClient) FetchProjects(group *Group) ([]Project, error) {
+func (apiClient APIClient) FetchAccessibleProjects() ([]Project, error) {
+	url := fmt.Sprintf("%s/projects", apiClient.url())
+	return httpGetJson[[]Project](apiClient.token, url)
+}
+
+func (apiClient APIClient) FetchGroupProjects(group *Group) ([]Project, error) {
 	return httpGetJson[[]Project](apiClient.token, fmt.Sprintf("%s/groups/%d/projects", apiClient.url(), group.ID))
 }
 
