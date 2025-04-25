@@ -8,6 +8,7 @@ import (
 	"gcm/internal/fs"
 	"gcm/internal/gitlab"
 	"gcm/internal/gitremote"
+	"gcm/internal/sh"
 	"gcm/internal/view"
 	"math"
 	"sync"
@@ -55,7 +56,7 @@ func TestCloneCommandConfigErrorHandling(t *testing.T) {
 	cmd := NewCloneCommand(
 		testView, fakeFs, gitlab.FakeApiFactory, func(s string) string {
 			return ""
-		}, // Empty string indicates env variable not set
+		}, &sh.FakeCommandRunner{}, // Empty string indicates env variable not set
 	)
 	cmd.Execute(appCfg)
 	// Use appCfg in your test
@@ -108,8 +109,9 @@ func TestCloneCommandWithFakeImplementations(t *testing.T) {
 		envVariableName = s
 		return "FAKE_TOKEN"
 	}
+	mockCommandRunner := sh.FakeCommandRunner{}
 	cmd := NewCloneCommand(
-		testView, fakeFS, fakeAPIFactory, fakeGetEnv,
+		testView, fakeFS, fakeAPIFactory, fakeGetEnv, &mockCommandRunner,
 	)
 
 	wg := sync.WaitGroup{}
@@ -147,4 +149,22 @@ func TestCloneCommandWithFakeImplementations(t *testing.T) {
 	if testView.ClonedNowViewModel.ClonedNowCount.Count() != 1 {
 		t.Errorf("Expected one project to be cloned now, got %v", testView.ClonedNowViewModel.ClonedNowCount.Count())
 	}
+	if len(mockCommandRunner.ExecutedCommands) != 1 {
+		t.Errorf("Expected one command to be executed, got %v", mockCommandRunner.ExecutedCommands)
+	}
+	if mockCommandRunner.ExecutedCommands[0] != "git clone git@somewhere:project1.git ." {
+		t.Errorf(
+			"Expected command %v to be executed, got %v",
+			"git clone git@somewhere:project1.git .",
+			mockCommandRunner.ExecutedCommands[0],
+		)
+	}
+	if mockCommandRunner.ExecutionCwds[0] != expectedDir {
+		t.Errorf(
+			"Expected current working dir %v, got %v",
+			expectedDir,
+			mockCommandRunner.ExecutionCwds[0],
+		)
+	}
+
 }

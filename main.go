@@ -10,6 +10,7 @@ import (
 	"gcm/internal/fs"
 	"gcm/internal/gitlab"
 	. "gcm/internal/log"
+	"gcm/internal/sh"
 	"gcm/internal/view"
 	typex "gcm/type"
 	"golang.org/x/term"
@@ -48,7 +49,13 @@ func main() {
 		go view.StartTTYRenderLoop(cloneView, os.Stdout, ctx, os.Stdout)
 	}
 
-	command := cloneCommand.NewCloneCommand(cloneCommandViewModel, &fs.RealFs{}, gitlab.NewAPIClient, os.Getenv)
+	command := cloneCommand.NewCloneCommand(
+		cloneCommandViewModel,
+		&fs.RealFs{},
+		gitlab.NewAPIClient,
+		os.Getenv,
+		&sh.ShellCommandRunner{},
+	)
 	command.Execute(config)
 
 	stopRenderLoop()

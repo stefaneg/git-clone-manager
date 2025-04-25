@@ -54,7 +54,7 @@ func TestCloneTableDriven(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(
 			tt.name, func(t *testing.T) {
-				mockRunner := &sh.MockCommandRunner{
+				mockRunner := &sh.FakeCommandRunner{
 					Output: "mock output",
 					Err:    nil,
 				}

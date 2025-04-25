@@ -9,6 +9,7 @@ import (
 	"gcm/internal/gitlab"
 	"gcm/internal/gitrepo"
 	logger "gcm/internal/log"
+	"gcm/internal/sh"
 	"github.com/samber/lo"
 	"path/filepath"
 )
@@ -16,10 +17,11 @@ import (
 // GetEnvFunc is the type of os.Getenv
 type GetEnvFunc func(string) string
 type CloneCommand struct {
-	vm         *terminalView.CloneCommandViewModel
-	filesystem fs.FileSystem
-	apiFactory gitlab.APIFactory
-	getEnv     GetEnvFunc
+	vm            *terminalView.CloneCommandViewModel
+	filesystem    fs.FileSystem
+	apiFactory    gitlab.APIFactory
+	getEnv        GetEnvFunc
+	commandRunner sh.CommandRunner
 }
 
 func NewCloneCommand(
@@ -27,12 +29,14 @@ func NewCloneCommand(
 	filesystem fs.FileSystem,
 	apiFactory gitlab.APIFactory,
 	getEnv GetEnvFunc,
+	commandRunner sh.CommandRunner,
 ) *CloneCommand {
 	return &CloneCommand{
-		vm:         vm,
-		filesystem: filesystem,
-		apiFactory: apiFactory,
-		getEnv:     getEnv,
+		vm:            vm,
+		filesystem:    filesystem,
+		apiFactory:    apiFactory,
+		getEnv:        getEnv,
+		commandRunner: commandRunner,
 	}
 }
 
@@ -89,5 +93,6 @@ func (command *CloneCommand) Execute(config *appConfig.AppConfig) {
 		fanInRepos,
 		command.vm.ClonedNowViewModel.ClonedNowCount,
 		errorChannel,
+		command.commandRunner,
 	)
 }

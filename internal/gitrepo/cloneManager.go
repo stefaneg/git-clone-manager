@@ -8,7 +8,12 @@ import (
 	"sync"
 )
 
-func CloneRepositories(repositories <-chan GitRepo, cloneCounter *counter.Counter, errorChannel chan error) {
+func CloneRepositories(
+	repositories <-chan GitRepo,
+	cloneCounter *counter.Counter,
+	errorChannel chan error,
+	commandRunner sh.CommandRunner,
+) {
 	cloneWaitGroup := sync.WaitGroup{}
 	for {
 		receivedRepo, ok := <-repositories
@@ -18,7 +23,7 @@ func CloneRepositories(repositories <-chan GitRepo, cloneCounter *counter.Counte
 		cloneWaitGroup.Add(1)
 		go func() {
 			defer cloneWaitGroup.Done()
-			err := receivedRepo.Clone(&sh.ShellCommandRunner{}) // HERE....NEED TO INHJECT COMMAND RUNNER.....
+			err := receivedRepo.Clone(commandRunner) // HERE....NEED TO INHJECT COMMAND RUNNER.....
 			if err != nil {
 				errorChannel <- fmt.Errorf("failed to clone project %s: %v", receivedRepo.GetName(), err)
 				return
