@@ -61,6 +61,7 @@ func (channeledApi *ChanneledApi) fetchProjectsForGroup(
 
 func (channeledApi *ChanneledApi) channelSubgroups(groupId string, gwg *sync.WaitGroup, groupChannel chan *Group) {
 	subgroups, err := channeledApi.api.FetchSubgroups(groupId)
+	defer gwg.Done()
 	if err != nil {
 		channeledApi.errorChannel <- fmt.Errorf("failed to fetch subgroups for group %s: %v", groupId, err)
 		return
@@ -71,7 +72,6 @@ func (channeledApi *ChanneledApi) channelSubgroups(groupId string, gwg *sync.Wai
 			groupChannel <- &subgroup
 		}()
 	}
-	gwg.Done()
 }
 
 func (channeledApi *ChanneledApi) channelGroups(
@@ -85,11 +85,12 @@ func (channeledApi *ChanneledApi) channelGroups(
 	rootGroup, err := channeledApi.api.FetchGroupInfo(rootGroupConfig.Name)
 	if err != nil || rootGroup == nil {
 		channeledApi.errorChannel <- fmt.Errorf(
-			"failed to fetch rootGroupConfig info for rootGroupConfig %s: %v",
+			"failed to fetch group info for root group %s: %v",
 			rootGroupConfig.Name,
 			err,
 		)
 		close(groupWorkList)
+		close(groupsChannel)
 		return
 	}
 

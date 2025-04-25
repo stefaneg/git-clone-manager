@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"gcm/internal/counter"
+	"gcm/internal/ext"
 	"gcm/internal/fs"
 	"gcm/internal/gitremote"
 	"testing"
@@ -84,6 +85,7 @@ func TestChanneledApi_ScheduleFetchMultiRootGitlabGroupProjects(t *testing.T) {
 	}
 
 	projectChannel := channeledApi.ScheduleFetchGitlabGroupProjects(groupConfigs)
+	expectOpenChannel(t, projectChannel)
 	var projects []Project
 	for project := range projectChannel {
 		projects = append(projects, project)
@@ -91,6 +93,18 @@ func TestChanneledApi_ScheduleFetchMultiRootGitlabGroupProjects(t *testing.T) {
 
 	expectProjectCount(t, projects, projectCounter, 8)
 	expectGroupCount(t, groupCounter, 6) // Roots plus subgroups
+}
+
+func expectOpenChannel(t *testing.T, channel <-chan Project) {
+	if ext.IsChannelClosed(channel) {
+		t.Errorf("expected channel to be open")
+	}
+}
+
+func expectClosedChannel(t *testing.T, channel <-chan Project) {
+	if !ext.IsChannelClosed(channel) {
+		t.Errorf("expected channel to be closed")
+	}
 }
 
 func TestChanneledApi_ErrorHandling_FetchGroupInfo(t *testing.T) {
@@ -108,12 +122,16 @@ func TestChanneledApi_ErrorHandling_FetchGroupInfo(t *testing.T) {
 	groupConfigs := []GroupConfig{
 		{Name: "nonexistent-group"},
 	}
-	channeledApi.ScheduleFetchGitlabGroupProjects(groupConfigs)
+	projectChannel := channeledApi.ScheduleFetchGitlabGroupProjects(groupConfigs)
+
+	for project := range projectChannel {
+		t.Errorf("Not expecting any projects but got %v", project)
+	}
 
 	expectErrors(
 		t,
 		errorChannel,
-		[]string{"failed to fetch rootGroupConfig info for rootGroupConfig nonexistent-group: failed to fetch group info"},
+		[]string{"failed to fetch group info for root group nonexistent-group: failed to fetch group info"},
 	)
 }
 
@@ -123,7 +141,9 @@ func TestChanneledApi_ErrorHandling_FetchSubgroups(t *testing.T) {
 		GroupInfo: map[string]*Group{
 			"root1": {ID: 1, Name: "root1"},
 		},
-		FetchError: errors.New("intentional fetch error"),
+		Projects: map[string][]Project{
+			"1": {},
+		},
 	}
 	errorChannel := make(chan error, 10)
 	projectCounter := counter.NewCounter()
@@ -136,13 +156,18 @@ func TestChanneledApi_ErrorHandling_FetchSubgroups(t *testing.T) {
 		{Name: "root1"},
 	}
 
-	channeledApi.ScheduleFetchGitlabGroupProjects(groupConfigs)
+	projectChan := channeledApi.ScheduleFetchGitlabGroupProjects(groupConfigs)
+	for project := range projectChan {
+		t.Errorf("Not expecting any projects but got %v", project)
+	}
 
 	expectErrors(
 		t,
 		errorChannel,
-		[]string{"failed to fetch rootGroupConfig info for rootGroupConfig root1: intentional fetch error"},
+		[]string{"failed to fetch subgroups for group 1: Fake API request on /groups/1/subgroups failed with status: 404 Not Found"},
 	)
+	// FLAKY TEST
+	expectClosedChannel(t, projectChan)
 }
 
 func TestChanneledApi_ErrorHandling_FetchProjects(t *testing.T) {
@@ -154,7 +179,6 @@ func TestChanneledApi_ErrorHandling_FetchProjects(t *testing.T) {
 		Subgroups: map[string][]Group{
 			"1": {},
 		},
-		FetchError: errors.New("intentional projects fetch error"),
 	}
 	errorChannel := make(chan error, 10)
 	projectCounter := counter.NewCounter()
@@ -167,11 +191,19 @@ func TestChanneledApi_ErrorHandling_FetchProjects(t *testing.T) {
 		{Name: "root1"},
 	}
 
-	channeledApi.ScheduleFetchGitlabGroupProjects(groupConfigs)
+	projectChannel := channeledApi.ScheduleFetchGitlabGroupProjects(groupConfigs)
 
+	for project := range projectChannel {
+		t.Errorf("Not expecting any projects but got %v", project)
+	}
 	expectErrors(
 		t,
 		errorChannel,
-		[]string{"failed to fetch rootGroupConfig info for rootGroupConfig root1: intentional projects fetch error"},
+		[]string{"failed to fetch projects for group root1: Fake API request on /groups/1/projects failed with status: 404 Not Found"},
 	)
+
+	if !ext.IsChannelClosed(projectChannel) {
+		t.Errorf("Expected project channel to be closed")
+	}
+
 }
