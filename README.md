@@ -78,6 +78,9 @@ go test ./...
 Currently, the only command is "clone". Running ```gcm``` will clone all groups and projects specified in your 
 configuration file.
 
+# Archived projects
+When cloning groups of projects, gcm supports cloning archived projects. In this case, an archive marker file is
+placed in the top directory of the project, and the project counts as an archived project in output. 
 
 # To do
 - Collect statistics - how many projects processed - checked out - archived

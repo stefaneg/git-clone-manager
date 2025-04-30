@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-func CloneRepositories(
+func CloneGitRepoChannel(
 	repositories <-chan GitRepo,
 	cloneCounter *counter.Counter,
 	errorChannel chan error,
@@ -23,7 +23,7 @@ func CloneRepositories(
 		cloneWaitGroup.Add(1)
 		go func() {
 			defer cloneWaitGroup.Done()
-			err := receivedRepo.Clone(commandRunner) // HERE....NEED TO INHJECT COMMAND RUNNER.....
+			err := receivedRepo.Clone(commandRunner)
 			if err != nil {
 				errorChannel <- fmt.Errorf("failed to clone project %s: %v", receivedRepo.GetName(), err)
 				return
@@ -49,6 +49,7 @@ func FilterCloneNeeded(
 				logger.Log.Tracef("%s \n", "Clone errorChan close, wait for last clone to finish, then breaking")
 				break
 			}
+
 			if receivedRepo.IsArchived() && receivedRepo.GetCloneOptions().CloneArchived() {
 				archivedCounter.Add(1)
 			}

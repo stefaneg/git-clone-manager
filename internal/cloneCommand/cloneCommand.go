@@ -70,9 +70,9 @@ func (command *CloneCommand) Execute(config *appConfig.AppConfig) {
 			cloneViewModel.GroupCount,
 			errorChannel,
 		)
-		remoteRepoChannel := channeledApi.ScheduleDirectProjects(cloneViewModel.DirectProjectCount)
+		remoteRepoChannel := channeledApi.ChannelDirectProjects(cloneViewModel.DirectProjectCount)
 
-		gitlabGroupProjectsChannel := channeledApi.ScheduleFetchGitlabGroupProjects(gitLabConfig.Groups)
+		gitlabGroupProjectsChannel := channeledApi.ChannelGroupProjects(gitLabConfig.Groups)
 		reposChannel := gitlab.ConvertProjectsToRepos(gitlabGroupProjectsChannel, filesystem)
 
 		var potentialClonesChannel []<-chan gitrepo.GitRepo
@@ -89,7 +89,7 @@ func (command *CloneCommand) Execute(config *appConfig.AppConfig) {
 
 	fanInRepos := lo.FanIn(appConfig.DefaultChannelBufferLength, cloneChannelsRateLimited...)
 
-	gitrepo.CloneRepositories(
+	gitrepo.CloneGitRepoChannel(
 		fanInRepos,
 		command.vm.ClonedNowViewModel.ClonedNowCount,
 		errorChannel,

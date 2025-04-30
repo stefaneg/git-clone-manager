@@ -122,8 +122,8 @@ func TestFilterCloneNeeded(t *testing.T) {
 		t.Errorf("expected repo1 to be cloned, got %s", filteredRepos[0].GetName())
 	}
 
-	if archivedCounter.Count() != 1 {
-		t.Errorf("expected 1 archived repo, got %d", archivedCounter.Count())
+	if archivedCounter.Count() != 1 { // Counts only cloned archived projects, as this is a clone manager.
+		t.Errorf("expected 1 archived repos, got %d", archivedCounter.Count())
 	}
 
 	if clonedCounter.Count() != 3 {

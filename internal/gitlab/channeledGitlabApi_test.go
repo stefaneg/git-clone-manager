@@ -84,7 +84,7 @@ func TestChanneledApi_ScheduleFetchMultiRootGitlabGroupProjects(t *testing.T) {
 		{Name: "root2"},
 	}
 
-	projectChannel := channeledApi.ScheduleFetchGitlabGroupProjects(groupConfigs)
+	projectChannel := channeledApi.ChannelGroupProjects(groupConfigs)
 	expectOpenChannel(t, projectChannel)
 	var projects []Project
 	for project := range projectChannel {
@@ -122,7 +122,7 @@ func TestChanneledApi_ErrorHandling_FetchGroupInfo(t *testing.T) {
 	groupConfigs := []GroupConfig{
 		{Name: "nonexistent-group"},
 	}
-	projectChannel := channeledApi.ScheduleFetchGitlabGroupProjects(groupConfigs)
+	projectChannel := channeledApi.ChannelGroupProjects(groupConfigs)
 
 	for project := range projectChannel {
 		t.Errorf("Not expecting any projects but got %v", project)
@@ -156,7 +156,7 @@ func TestChanneledApi_ErrorHandling_FetchSubgroups(t *testing.T) {
 		{Name: "root1"},
 	}
 
-	projectChan := channeledApi.ScheduleFetchGitlabGroupProjects(groupConfigs)
+	projectChan := channeledApi.ChannelGroupProjects(groupConfigs)
 	for project := range projectChan {
 		t.Errorf("Not expecting any projects but got %v", project)
 	}
@@ -191,7 +191,7 @@ func TestChanneledApi_ErrorHandling_FetchProjects(t *testing.T) {
 		{Name: "root1"},
 	}
 
-	projectChannel := channeledApi.ScheduleFetchGitlabGroupProjects(groupConfigs)
+	projectChannel := channeledApi.ChannelGroupProjects(groupConfigs)
 
 	for project := range projectChannel {
 		t.Errorf("Not expecting any projects but got %v", project)

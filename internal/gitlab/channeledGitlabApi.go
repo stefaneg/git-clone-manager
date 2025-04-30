@@ -152,7 +152,8 @@ func (channeledApi *ChanneledApi) FetchAndChannelGroupProjects(rootGroupConfig *
 	return gitlabProjectChannel
 }
 
-func (channeledApi *ChanneledApi) ScheduleFetchGitlabGroupProjects(groups []GroupConfig) <-chan Project {
+// ChannelGroupProjects creates a channel of gitrepo.GitRepo objects from the projects defined in the config.
+func (channeledApi *ChanneledApi) ChannelGroupProjects(groups []GroupConfig) <-chan Project {
 	var projectChannels []<-chan Project
 	for _, group := range groups {
 		projectChannels = append(projectChannels, channeledApi.FetchAndChannelGroupProjects(&group))
@@ -160,6 +161,7 @@ func (channeledApi *ChanneledApi) ScheduleFetchGitlabGroupProjects(groups []Grou
 	return lo.FanIn(ProjectChannelBufferSize, projectChannels...)
 }
 
+// ConvertProjectsToRepos convert incoming channeled Project objects and channel as gitrepo.GitRepository to the returned channel.
 func ConvertProjectsToRepos(gitlabProjectChannel <-chan Project, filesystem fs.FileSystem) chan gitrepo.GitRepo {
 	gitRepoChannel := make(chan gitrepo.GitRepo, 10)
 
@@ -184,7 +186,9 @@ func ConvertProjectsToRepos(gitlabProjectChannel <-chan Project, filesystem fs.F
 	return gitRepoChannel
 }
 
-func (channeledApi *ChanneledApi) ScheduleDirectProjects(projectCounter *counter.Counter) chan gitrepo.GitRepo {
+// ChannelDirectProjects creates a channel of gitrepo.GitRepo objects from the projects defined in the config.
+// Does not require API fetching.
+func (channeledApi *ChanneledApi) ChannelDirectProjects(projectCounter *counter.Counter) chan gitrepo.GitRepo {
 	repoChannel := make(chan gitrepo.GitRepo, GroupChannelBufferSize)
 	go func() {
 		filesystem := fs.RealFs{}
