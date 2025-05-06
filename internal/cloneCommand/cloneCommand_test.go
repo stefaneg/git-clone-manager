@@ -74,97 +74,147 @@ type TokenHostPair struct {
 	Host  string
 }
 
-func TestCloneCommandWithFakeImplementations(t *testing.T) {
-	// Setup fake dependencies
-	fakeFS := &fs.FakeFileSystem{}
-	createdApis := []TokenHostPair{}
+// TODO GSE: AM HERE, next is designing the arrangement nicely for next command
+// Perhaps add tests for interesting corner cases.
+func TestCloneCommandWithFakeImplementationsTableDriven(t *testing.T) {
+	type testCase struct {
+		name                 string
+		appCfg               *appConfig.AppConfig
+		gitlabApiArrangement gitlab.API
 
-	fakeAPIFactory := func(token string, host string) gitlab.API {
-		createdApis = append(createdApis, TokenHostPair{token, host})
-		return gitlab.FakeSetupNoSubgroupsOneProject()
+		expectedDir                fs.DirectoryPath
+		expectedApis               []TokenHostPair
+		expectedCommands           []string
+		expectedCwds               []fs.DirectoryPath
+		expectedCloneCount         int
+		expectedError              string
+		expectedEnvVariableLookups []string
 	}
-	testView := NewFakeCloneCommandViewModel()
 
-	// Create a sample app config
-	appCfg := &appConfig.AppConfig{
-		GitLab: []gitlab.GitLabConfig{
-			{
-				EnvTokenVariableName: "GITLAB_TEST_TOKEN_ENV_VAR",
-				HostName:             "gitlab.somehost.com",
-				CloneDirectory:       "/path/for/gitlab.somehost.com",
-				Groups: []gitlab.GroupConfig{
+	testCases := []testCase{
+		{
+			name: "Single project clone",
+			appCfg: &appConfig.AppConfig{
+				GitLab: []gitlab.GitLabConfig{
 					{
-						Name:          "root1",
-						CloneArchived: false,
+						EnvTokenVariableName: "GITLAB_TEST_TOKEN_ENV_VAR",
+						HostName:             "gitlab.somehost.com",
+						CloneDirectory:       "/path/for/gitlab.somehost.com",
+						Groups: []gitlab.GroupConfig{
+							{
+								Name:          "root1",
+								CloneArchived: false,
+							},
+						},
+						Projects:           []gitremote.ProjectConfig{},
+						RateLimitPerSecond: math.MaxInt,
 					},
 				},
-				Projects:           []gitremote.ProjectConfig{},
-				RateLimitPerSecond: math.MaxInt,
 			},
+			gitlabApiArrangement:       gitlab.FakeSetupNoSubgroupsOneProject(),
+			expectedDir:                fs.DirectoryPath("/path/for/gitlab.somehost.com"),
+			expectedApis:               []TokenHostPair{{Token: "FAKE_TOKEN", Host: "gitlab.somehost.com"}},
+			expectedCommands:           []string{"git clone git@somewhere:project1.git ."},
+			expectedCwds:               []fs.DirectoryPath{fs.DirectoryPath("/path/for/gitlab.somehost.com")},
+			expectedCloneCount:         1,
+			expectedEnvVariableLookups: []string{"GITLAB_TEST_TOKEN_ENV_VAR"},
 		},
 	}
 
-	envVariableName := "NONE"
-	fakeGetEnv := func(s string) string {
-		envVariableName = s
-		return "FAKE_TOKEN"
-	}
-	mockCommandRunner := sh.FakeCommandRunner{}
-	cmd := NewCloneCommand(
-		testView, fakeFS, fakeAPIFactory, fakeGetEnv, &mockCommandRunner,
-	)
+	for _, tc := range testCases {
+		t.Run(
+			tc.name, func(t *testing.T) {
+				// Setup fake dependencies
+				fakeFS := &fs.FakeFileSystem{}
+				createdApis := []TokenHostPair{}
 
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		cmd.Execute(appCfg)
-	}()
-	wg.Wait()
+				fakeAPIFactory := func(token string, host string) gitlab.API {
+					createdApis = append(createdApis, TokenHostPair{token, host})
+					apiArrangement := tc.gitlabApiArrangement
+					return apiArrangement // Needs to go into test arrangement
+				}
+				testView := NewFakeCloneCommandViewModel()
 
-	expectedDir := fs.DirectoryPath("/path/for/gitlab.somehost.com")
-	if len(fakeFS.CreatedDirs) < 1 || fakeFS.CreatedDirs[0] != expectedDir {
-		t.Errorf("expected directory %v to be created, but got %v", expectedDir, fakeFS.CreatedDirs[0])
-	}
-	if len(createdApis) != 1 {
-		t.Errorf("expected 1 created api, found %v", len(createdApis))
-	}
-	if envVariableName != appCfg.GitLab[0].EnvTokenVariableName {
-		t.Errorf(
-			"Expected env variable %v to be used to retrieve token env variable %v",
-			envVariableName,
-			appCfg.GitLab[0].EnvTokenVariableName,
-		)
-	}
-	if createdApis[0].Token != fakeGetEnv("") {
-		t.Errorf(
-			"Expected retrieved env token %v to be used to create API %v",
-			fakeGetEnv(""),
-			createdApis[0].Token,
-		)
-	}
-	if createdApis[0].Host != appCfg.GitLab[0].HostName {
-		t.Errorf("Expected host to be used to create API")
-	}
-	if testView.ClonedNowViewModel.ClonedNowCount.Count() != 1 {
-		t.Errorf("Expected one project to be cloned now, got %v", testView.ClonedNowViewModel.ClonedNowCount.Count())
-	}
-	if len(mockCommandRunner.ExecutedCommands) != 1 {
-		t.Errorf("Expected one command to be executed, got %v", mockCommandRunner.ExecutedCommands)
-	}
-	if mockCommandRunner.ExecutedCommands[0] != "git clone git@somewhere:project1.git ." {
-		t.Errorf(
-			"Expected command %v to be executed, got %v",
-			"git clone git@somewhere:project1.git .",
-			mockCommandRunner.ExecutedCommands[0],
-		)
-	}
-	if mockCommandRunner.ExecutionCwds[0] != expectedDir {
-		t.Errorf(
-			"Expected current working dir %v, got %v",
-			expectedDir,
-			mockCommandRunner.ExecutionCwds[0],
-		)
-	}
+				envVariableLookups := []string{}
+				fakeGetEnv := func(s string) string {
+					envVariableLookups = append(envVariableLookups, s)
+					return "FAKE_TOKEN"
+				}
+				mockCommandRunner := sh.FakeCommandRunner{}
+				cmd := NewCloneCommand(
+					testView, fakeFS, fakeAPIFactory, fakeGetEnv, &mockCommandRunner,
+				)
 
+				wg := sync.WaitGroup{}
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					cmd.Execute(tc.appCfg)
+				}()
+				wg.Wait()
+
+				if len(tc.expectedEnvVariableLookups) != len(envVariableLookups) {
+					t.Errorf(
+						"expected env variable lookups %v, got %v",
+						tc.expectedEnvVariableLookups,
+						envVariableLookups,
+					)
+				} else {
+					for i, expectedEnvVariableLookup := range tc.expectedEnvVariableLookups {
+						if envVariableLookups[i] != expectedEnvVariableLookup {
+							t.Errorf(
+								"expected env variable lookup %v, got %v",
+								expectedEnvVariableLookup,
+								envVariableLookups[i],
+							)
+						}
+					}
+				}
+				// Assertions
+				if len(fakeFS.CreatedDirs) < 1 || fakeFS.CreatedDirs[0] != tc.expectedDir {
+					t.Errorf("expected directory %v to be created, but got %v", tc.expectedDir, fakeFS.CreatedDirs[0])
+				}
+				if len(createdApis) != len(tc.expectedApis) {
+					t.Errorf("expected %v created APIs, found %v", len(tc.expectedApis), len(createdApis))
+				}
+				for i, expectedApi := range tc.expectedApis {
+					if createdApis[i] != expectedApi {
+						t.Errorf("expected API %v, got %v", expectedApi, createdApis[i])
+					}
+				}
+				if testView.ClonedNowViewModel.ClonedNowCount.Count() != tc.expectedCloneCount {
+					t.Errorf(
+						"expected %v projects to be cloned now, got %v",
+						tc.expectedCloneCount,
+						testView.ClonedNowViewModel.ClonedNowCount.Count(),
+					)
+				}
+				if len(mockCommandRunner.ExecutedCommands) != len(tc.expectedCommands) {
+					t.Errorf(
+						"expected %v commands to be executed, got %v",
+						len(tc.expectedCommands),
+						len(mockCommandRunner.ExecutedCommands),
+					)
+				}
+				for i, expectedCommand := range tc.expectedCommands {
+					if mockCommandRunner.ExecutedCommands[i] != sh.ShellCommand(expectedCommand) {
+						t.Errorf(
+							"expected command %v to be executed, got %v",
+							expectedCommand,
+							mockCommandRunner.ExecutedCommands[i],
+						)
+					}
+				}
+				for i, expectedCwd := range tc.expectedCwds {
+					if mockCommandRunner.ExecutionCwds[i] != expectedCwd {
+						t.Errorf(
+							"expected current working dir %v, got %v",
+							expectedCwd,
+							mockCommandRunner.ExecutionCwds[i],
+						)
+					}
+				}
+			},
+		)
+	}
 }
